@@ -1,0 +1,107 @@
+[
+  {
+    "id": "444abfc3",
+    "timestamp": "2026-03-21 14:51:48",
+    "distance_meters": 9202.3,
+    "consistency_pct": 13.3,
+    "net_pct": 36.6,
+    "work_rate": "High"
+  },
+  {
+    "id": "65925d87",
+    "timestamp": "2026-03-21 14:53:07",
+    "distance_meters": 9202.3,
+    "consistency_pct": 13.3,
+    "net_pct": 36.6,
+    "work_rate": "High"
+  },
+  {
+    "id": "dfa62e0c",
+    "timestamp": "2026-03-21 14:54:14",
+    "distance_meters": 3809.4,
+    "consistency_pct": 14.5,
+    "net_pct": 4.2,
+    "work_rate": "High"
+  },
+  {
+    "id": "07022d67",
+    "timestamp": "2026-03-21 15:00:07",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "1288fdf0",
+    "timestamp": "2026-03-21 15:04:53",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "27973ec9",
+    "timestamp": "2026-03-21 15:06:38",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "d1880b54",
+    "timestamp": "2026-03-21 15:14:03",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "663d54b6",
+    "timestamp": "2026-03-21 15:16:42",
+    "distance_meters": 3809.4,
+    "consistency_pct": 14.5,
+    "net_pct": 4.2,
+    "work_rate": "High"
+  },
+  {
+    "id": "a915ece6",
+    "timestamp": "2026-03-21 15:17:03",
+    "distance_meters": 9202.3,
+    "consistency_pct": 13.3,
+    "net_pct": 36.6,
+    "work_rate": "High"
+  },
+  {
+    "id": "47789a83",
+    "timestamp": "2026-03-21 15:19:59",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "71419298",
+    "timestamp": "2026-03-21 15:28:38",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High"
+  },
+  {
+    "id": "0d0b53ad",
+    "timestamp": "2026-03-21 15:30:17",
+    "distance_meters": 9202.3,
+    "consistency_pct": 13.3,
+    "net_pct": 36.6,
+    "work_rate": "High"
+  },
+  {
+    "id": "c0a97f90",
+    "timestamp": "2026-03-21 15:39:47",
+    "distance_meters": 11176.7,
+    "consistency_pct": 21.0,
+    "net_pct": 45.7,
+    "work_rate": "High",
+    "shot_total": 36
+  }
+]
