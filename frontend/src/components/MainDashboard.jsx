@@ -1,166 +1,112 @@
 import React, { useState } from 'react';
 import UploadArea from './UploadArea';
 import VideoPlayer from './VideoPlayer';
+import AnalysisModal from './AnalysisModal';
+import PadelHeatmap from './PadelHeatmap';
 
 export default function MainDashboard() {
   const [videoFile, setVideoFile] = useState(null);
-  const [videoUrl, setVideoUrl] = useState(null); // URL-ul local pentru player
-  const [isAnalyzing, setIsAnalyzing] = useState(false); // State pentru loading
-  const [analysisError, setAnalysisError] = useState(null); // Dacă crapă backend-ul
-  const [analysisPoints, setAnalysisPoints] = useState(null); // Punctele primite (pt Heatmap mai târziu)
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisPoints, setAnalysisPoints] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Funcția care se ocupă de tot fluxul
   const handleVideoUpload = async (file) => {
-    console.log("Fișier selectat, se pregătește de trimitere:", file.name);
-    
-    // Resetăm stările anterioare
-    setAnalysisError(null);
-    setAnalysisPoints(null);
-    setVideoFile(file);
-    
-    // 1. Începem "Loading"-ul
     setIsAnalyzing(true);
+    setVideoFile(file);
+    setVideoUrl(URL.createObjectURL(file));
 
-    // 2. Pregătim URL-ul local pentru Video Player
-    // Asta transformă fișierul tău de pe disc într-un link pe care React îl poate reda INSTANT (fără upload public)
-    const localUrl = URL.createObjectURL(file);
-    setVideoUrl(localUrl);
-
-    // 3. Pregătim trimiterea către Backend
-    const formData = new FormData();
-    formData.append('file', file); // 'file' e numele câmpului cerut de FastAPI
-
-    try {
-      console.log("Trimit către backend...");
-      // FACEM FETCH-UL REAL
-      const response = await fetch('http://localhost:8000/analyze', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log("Succes de la Backend! Datele primite:", data);
-        setAnalysisPoints(data.points); // Salvăm punctele (pentru colegul cu heatmap)
-        // În momentul ăsta, fiindcă setAnalysisError e null și isAnalyzing se va face false, player-ul va apărea automat
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Eroare de la server:", response.status, response.statusText);
-        setAnalysisError(errorData.detail || `A crăpat serverul de Python (Cod ${response.status})`);
-      }
-    } catch (error) {
-      console.error("Eroare de rețea:", error);
-      setAnalysisError("Nu mă pot conecta la backend. E pornit serverul de Python pe localhost:8000?");
-    } finally {
-      // 4. ÎNCHEIEM "Loading"-ul indiferent dacă e succes sau eroare
+    // Simulăm un delay de analiză pentru efect
+    setTimeout(() => {
       setIsAnalyzing(false);
-    }
-  };
-
-  const handleReset = () => {
-    setVideoFile(null);
-    if (videoUrl) URL.revokeObjectURL(videoUrl); // Curățăm memoria
-    setVideoUrl(null);
-    setAnalysisPoints(null);
-    setAnalysisError(null);
+      // Puncte de test pentru heatmap
+      setAnalysisPoints([
+        {x: 20, y: 30}, {x: 50, y: 50}, {x: 80, y: 20}, {x: 45, y: 70}
+      ]);
+    }, 2000);
   };
 
   return (
-    <div className="flex-1 bg-gray-950 text-white h-screen p-8 overflow-y-auto">
+    <div className="flex-1 bg-[#0a0c10] text-white h-screen flex flex-col w-full min-w-0">
       
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8 border-b border-gray-800 pb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard Analiză <span className="text-green-400 font-light">Padel AI</span></h1>
-        <div className="flex items-center gap-4">
-           {videoFile && (
-             <button onClick={handleReset} className="text-sm text-gray-500 hover:text-white underline">
-               Încarcă alt video
-             </button>
-           )}
-           <div className="px-4 py-1.5 rounded-full bg-gray-900 border border-gray-800 text-sm font-medium">
-             Status Backend: <span className="text-green-400 ml-1">Connected (Port 8000)</span>
-           </div>
+      {/* Header - Rămâne la fel, e destul de mare */}
+      <header className="px-12 pt-12 pb-8 flex justify-between items-center w-full">
+        <div>
+          <h1 className="text-8xl font-black tracking-[-0.08em] italic uppercase leading-[0.8]">
+            PADEL<span className="text-green-500">AI</span>
+          </h1>
+          <p className="text-gray-600 font-bold text-sm tracking-[0.8em] mt-4 ml-2 uppercase">
+            Ultimate Performance Radar
+          </p>
         </div>
-      </div>
+        <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-8 py-3 rounded-full text-xs font-black uppercase tracking-widest italic animate-pulse">
+          ● System Live
+        </div>
+      </header>
 
-      {/* Grid Principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main UI Section - Aici facem modificările magice */}
+      <main className="flex-1 px-12 pb-12 flex flex-col gap-10 overflow-hidden w-full">
         
-        {/* ZONA CENTRALĂ - Magia se întâmplă aici */}
-        <div className="lg:col-span-2 bg-gray-900 rounded-2xl border border-gray-800 h-[580px] shadow-2xl relative overflow-hidden p-4">
-          
-          {/* Starea 1: Nu avem video selectat -> Arătăm UploadArea */}
+        {/* Top: Video Player - O FACEM GIGANTICĂ */}
+        {/* 'flex-[6]' îi spune să ocupe de 6 ori mai mult spațiu decât zona de jos pe verticală */}
+        {/* 'h-[75vh]' forțează înălțimea să fie 75% din ecran */}
+        <div className="flex-[6] h-[75vh] bg-[#11141b] rounded-[4rem] border border-gray-800/50 relative overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.6)] w-full">
           {!videoFile && !isAnalyzing && (
-             <UploadArea onFileSelect={handleVideoUpload} />
+            <div className="scale-125 w-full h-full flex items-center justify-center">
+               <UploadArea onFileSelect={handleVideoUpload} />
+            </div>
           )}
-
-          {/* Starea 2: Se încarcă și se analizează -> Arătăm Spinner */}
+          
           {isAnalyzing && (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900rounded-xl border border-gray-800">
-              {/* Spinner HTML/CSS șmecher */}
-              <div className="relative flex items-center justify-center">
-                 <div className="w-16 h-16 rounded-full border-t-4 border-b-4 border-green-500 animate-spin"></div>
-                 <div className="absolute w-10 h-10 rounded-full border-t-2 border-b-2 border-green-300 animate-spin-reverse opacity-70"></div>
-              </div>
-              <p className="text-green-400 font-black text-2xl mt-8 animate-pulse tracking-tight">Se analizează meciul...</p>
-              <p className="text-gray-500 text-sm mt-2">Nu închide fereastra. Acest proces poate dura câteva minute.</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0c10]/80 backdrop-blur-md">
+              <div className="w-32 h-32 border-[12px] border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              <h2 className="text-5xl font-black mt-12 text-green-400 italic tracking-tighter">SCANNING COURT...</h2>
             </div>
           )}
 
-          {/* Starea 3: Avem o eroare de la backend */}
-          {analysisError && (
-             <div className="w-full h-full flex flex-col items-center justify-center bg-red-950/20 rounded-xl border border-red-800/50 p-6">
-                <span className="text-6xl mb-6">🚨</span>
-                <p className="text-red-400 font-bold text-xl mb-3">Analiza a Eșuat</p>
-                <p className="text-red-300/80 bg-red-950/50 px-4 py-2 rounded-lg text-center font-mono text-sm max-w-lg">{analysisError}</p>
-                <button 
-                    className="mt-8 bg-red-500 text-white px-5 py-2 rounded-lg font-bold hover:bg-red-600 transition-colors"
-                    onClick={handleReset}
-                >
-                    Încearcă din nou
-                </button>
-             </div>
+          {!isAnalyzing && videoFile && videoUrl && (
+            // Ne asigurăm că VideoPlayer ocupă tot containerul
+            <div className="w-full h-full">
+               <VideoPlayer videoUrl={videoUrl} fileName={videoFile.name} onOpenDetails={() => setIsModalOpen(true)} />
+            </div>
           )}
-
-          {/* Starea 4: Succes! -> Arătăm VideoPlayer-ul */}
-          {!isAnalyzing && !analysisError && videoFile && videoUrl && (
-             <VideoPlayer videoUrl={videoUrl} fileName={videoFile.name} />
-          )}
-
         </div>
 
-        {/* Zona de Stats & Colegul 4 (Heatmap) */}
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 shadow-2xl flex flex-col">
-          <h3 className="text-xl font-bold mb-6 border-b border-gray-800 pb-4">Rezultate Meci</h3>
+        {/* Bottom Area: Stats & Radar - O facem mai compactă pe verticală */}
+        {/* 'flex-[1]' o face mai subțire comparativ cu zona video */}
+        <div className="flex-[1] flex gap-10 w-full min-h-[150px]">
           
-          <div className="space-y-4 flex-1">
-             <div className="bg-gray-800/80 p-4 rounded-xl flex justify-between items-center border border-gray-700/50">
-               <span className="text-gray-300 font-medium">Lovitură Smash:</span>
-               <span className="font-black text-2xl text-green-400">12</span>
+          {/* Stats Section - Rămân la fel de șmechere */}
+          <div className="flex-[2] bg-[#11141b] rounded-[3rem] border border-gray-800/50 p-8 flex items-center justify-around shadow-xl">
+             {/* ... conținutul cardurilor rămâne la fel ... */}
+             <div className="text-center group">
+                <p className="text-xs text-gray-500 font-black uppercase tracking-widest mb-2 group-hover:text-green-400 transition-colors">Smash</p>
+                <p className="text-6xl font-black text-green-400 tracking-tighter italic">12</p>
              </div>
-             <div className="bg-gray-800/80 p-4 rounded-xl flex justify-between items-center border border-gray-700/50">
-               <span className="text-gray-300 font-medium">Forehand (Dreapta):</span>
-               <span className="font-black text-2xl text-blue-400">45</span>
+             <div className="w-px h-16 bg-gray-800/50"></div>
+             <div className="text-center group">
+                <p className="text-xs text-gray-500 font-black uppercase tracking-widest mb-2 group-hover:text-blue-400 transition-colors">Forehand</p>
+                <p className="text-6xl font-black text-blue-400 tracking-tighter italic">45</p>
              </div>
-             <div className="bg-gray-800/80 p-4 rounded-xl flex justify-between items-center border border-gray-700/50">
-               <span className="text-gray-300 font-medium">Backhand (Revers):</span>
-               <span className="font-black text-2xl text-purple-400">30</span>
-             </div>
-             
-             {/* Cutia unde vine Heatmap-ul de la persoana 4 */}
-             <div className="mt-8 flex-1 border-2 border-dashed border-gray-700/70 rounded-xl flex flex-col items-center justify-center text-sm text-gray-500 bg-gray-800/30 min-h-[150px]">
-                <span className="font-bold mb-1">Heatmap Teren Padel</span>
-                <span className="text-xs">(Rezervat pt. Persoana 4)</span>
-                {analysisPoints && (
-                    <span className="mt-2 text-xs text-green-500 font-medium bg-green-950 px-2 py-0.5 rounded-full">
-                       Am primit {analysisPoints.length} puncte pt Heatmap!
-                    </span>
-                )}
+             <div className="w-px h-16 bg-gray-800/50"></div>
+             <div className="text-center group">
+                <p className="text-xs text-gray-500 font-black uppercase tracking-widest mb-2 group-hover:text-purple-400 transition-colors">Backhand</p>
+                <p className="text-6xl font-black text-purple-400 tracking-tighter italic">30</p>
              </div>
           </div>
-        </div>
 
-      </div>
+          {/* Heatmap Section - Radarul de impact */}
+          <div className="flex-[1.5] bg-[#11141b] rounded-[3rem] border border-gray-800/50 p-6 relative shadow-xl overflow-hidden group">
+            <h3 className="absolute top-5 left-8 text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] z-10">Impact Radar</h3>
+            <div className="w-full h-full scale-110 group-hover:scale-125 transition-transform duration-700 flex items-center justify-center">
+               <PadelHeatmap points={analysisPoints} />
+            </div>
+          </div>
+
+        </div>
+      </main>
+
+      <AnalysisModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} points={analysisPoints} />
     </div>
   );
 }

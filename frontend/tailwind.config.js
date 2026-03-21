@@ -6,7 +6,6 @@ export default {
   ],
   theme: {
     extend: {
-      // ADAUGĂ ASTA DE JOS 👇
       animation: {
         'spin-reverse': 'spin-reverse 1s linear infinite',
       },
@@ -15,7 +14,6 @@ export default {
           to: { transform: 'rotate(-360deg)' },
         }
       }
-      // PÂNĂ AICI 👆
     },
   },
   plugins: [],
