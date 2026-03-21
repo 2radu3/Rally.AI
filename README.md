@@ -1,4 +1,4 @@
-# RallyAI[^1] | PadelCoach 
+# 🎾🏓 RallyAI[^1] | PadelCoach 
 
 Most padel players hit a ceiling because they can't see what they're doing wrong.
 Our solution: PadelAI - a performance platform that turns raw match footage into an analytics dashboard, making professional coatching accessible for the everyday player. 
