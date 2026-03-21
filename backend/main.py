@@ -3,7 +3,7 @@ import os
 import shutil
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-#salut
+
 app = FastAPI()
 
 app.add_middleware(
