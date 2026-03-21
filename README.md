@@ -21,7 +21,7 @@ Our solution: RallyAI - a performance platform that turns raw match footage into
 * Features a global shot-cooldown logic to prevent double-counting and ensure clean data during the live demo.
 * Visuals: Vanilla JS (3D Isometric Engine) & Matplotlib (Statistical Reports).
 
-##Setup and run
+## Setup and run
 
 ### 1. Install dependencies
 ```bash
