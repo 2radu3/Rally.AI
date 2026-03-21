@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dark Area Chart (Green)</title>
+  <title>Session Analysis Chart</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -15,35 +15,38 @@
 <body class="h-full">
   <div id="app" class="h-full w-full overflow-auto">
     <div style="max-width:960px; margin:0 auto; padding:40px 24px;">
+      <h1 id="chartTitle" style="color:#e2e8f0; font-size:28px; font-weight:700; margin-bottom:8px;">Session Progression</h1>
       <div id="legend" style="display:flex; gap:24px; margin-bottom:32px; flex-wrap:wrap;"></div>
       <div style="position:relative; width:100%; aspect-ratio:16/9; min-height:300px;">
         <canvas id="chart" style="width:100%; height:100%; display:block;"></canvas>
-        <div id="tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(15,20,35,0.95); border:1px solid rgba(74,222,128,0.3); border-radius:10px; padding:12px 16px; font-size:13px; color:#cbd5e1; z-index:10; backdrop-filter:blur(8px); box-shadow:0 8px 32px rgba(0,0,0,0.4);"></div>
+        <div id="tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(15,20,35,0.95); border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:12px 16px; font-size:13px; color:#cbd5e1; z-index:10; backdrop-filter:blur(8px); box-shadow:0 8px 32px rgba(0,0,0,0.4);"></div>
       </div>
     </div>
   </div>
 
   <script>
     // --- DATA ---
-    const xLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // Changed to Sessions instead of Months
+    const xLabels = ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5', 'Session 6', 'Session 7', 'Session 8'];
 
     const seriesData = [
-      { values: [12, 19, 14, 25, 22, 30, 28, 35, 32, 40, 38, 45], color: 'rgba(74,222,128,1)',   fill: 'rgba(74,222,128,0.18)', defaultLabel: 'Series A' },
-      { values: [8,  14, 18, 15, 26, 22, 32, 27, 36, 33, 42, 39], color: 'rgba(74,222,128,0.65)', fill: 'rgba(74,222,128,0.10)', defaultLabel: 'Series B' },
-      { values: [4,  9,  11, 20, 14, 18, 20, 24, 22, 28, 30, 34], color: 'rgba(74,222,128,0.35)', fill: 'rgba(74,222,128,0.05)', defaultLabel: 'Series C' },
+      // Volleys (Green - trending up)
+      { values: [12, 14, 18, 17, 22, 26, 28, 32], color: 'rgba(74,222,128,1)', fill: 'rgba(74,222,128,0.15)', defaultLabel: 'Volleys' },
+      // Smashes (Blue - trending up)
+      { values: [5, 7, 10, 14, 12, 18, 20, 24], color: 'rgba(96,165,250,1)', fill: 'rgba(96,165,250,0.15)', defaultLabel: 'Smashes' },
+      // Errors (Red - trending down)
+      { values: [30, 28, 25, 22, 24, 18, 15, 10], color: 'rgba(248,113,113,1)', fill: 'rgba(248,113,113,0.15)', defaultLabel: 'Errors' },
     ];
 
     // --- CONFIG ---
     let currentConfig = {
-      chart_title: 'Monthly Performance',
+      chart_title: 'Session Progression',
       series_1_label: 'Volleys',
-      series_2_label: 'Smash',
+      series_2_label: 'Smashes',
       series_3_label: 'Errors',
       background_color: '#0b0f1a',
       surface_color: '#151b2e',
       text_color: '#e2e8f0',
-      primary_action_color: '#4ade80',
-      secondary_action_color: '#22c55e',
       font_family: 'DM Sans',
       font_size: 16,
     };
@@ -160,9 +163,8 @@
 
         // Gradient fill
         const grad = ctx.createLinearGradient(0, chartRect.top, 0, chartRect.bottom);
-        const baseAlpha = si === 0 ? 0.2 : si === 1 ? 0.12 : 0.06;
-        grad.addColorStop(0, `rgba(74,222,128,${baseAlpha})`);
-        grad.addColorStop(1, `rgba(74,222,128,0)`);
+        grad.addColorStop(0, s.fill);
+        grad.addColorStop(1, s.fill.replace('0.15)', '0)'));
         ctx.fillStyle = grad;
         ctx.fill();
 
@@ -185,10 +187,10 @@
           const radius = isHovered ? 5 : 3;
           ctx.beginPath();
           ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = isHovered ? '#4ade80' : s.color;
+          ctx.fillStyle = s.color; 
           ctx.fill();
           if (isHovered) {
-            ctx.strokeStyle = 'rgba(74,222,128,0.3)';
+            ctx.strokeStyle = s.color.replace('1)', '0.3)'); // Soft glowing border matching the series color
             ctx.lineWidth = 6;
             ctx.stroke();
           }
@@ -198,7 +200,7 @@
       // Hover vertical line
       if (currentHover >= 0 && currentHover < xLabels.length) {
         const x = chartRect.left + currentHover * stepX;
-        ctx.strokeStyle = 'rgba(74,222,128,0.15)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
@@ -247,7 +249,7 @@
         seriesData.forEach((s, i) => {
           html += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
             <span style="width:8px;height:8px;border-radius:50%;background:${s.color};"></span>
-            <span>${labels[i]}: <strong style="color:#4ade80;">${s.values[idx]}</strong></span>
+            <span>${labels[i]}: <strong style="color:${s.color};">${s.values[idx]}</strong></span>
           </div>`;
         });
         tooltip.innerHTML = html;
