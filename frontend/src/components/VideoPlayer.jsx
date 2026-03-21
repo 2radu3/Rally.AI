@@ -1,37 +1,57 @@
 import React from 'react';
 
-// AM ADĂUGAT onOpenDetails ÎN PARANTEZE 👇
 export default function VideoPlayer({ videoUrl, fileName, onOpenDetails }) {
-  if (!videoUrl) return null;
+  const hotspots = [12, 28, 45, 62];
 
   return (
-    <div className="w-full h-full flex flex-col p-2 bg-gray-950 rounded-2xl border border-gray-800 shadow-inner">
-      
-      <div className="flex-1 bg-black rounded-xl overflow-hidden relative group">
+    <div className="w-full h-full flex flex-col bg-black overflow-hidden rounded-[inherit]">
+      {/* Zona Video - Forțăm încadrarea */}
+      <div className="relative flex-1 min-h-0 w-full bg-black flex items-center justify-center">
         <video 
           src={videoUrl} 
           controls 
-          className="w-full h-full object-contain"
+          className="max-w-full max-h-full w-auto h-auto object-contain"
         />
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none p-4 flex items-end">
-           <span className="text-sm font-medium text-white/90 truncate">{fileName}</span>
+        
+        {/* File Tag */}
+        <div className="absolute top-6 left-6 px-4 py-1.5 bg-black/60 backdrop-blur-md border border-white/10 rounded-full pointer-events-none">
+           <p className="text-[10px] text-white font-black uppercase tracking-widest italic">{fileName}</p>
         </div>
       </div>
 
-      <div className="h-10 flex items-center justify-between px-3 mt-1">
-        <div className="flex items-center gap-2">
-           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-           <span className="text-xs text-gray-400 font-medium">Analizat complet</span>
+      {/* Timeline Interactiv sub video */}
+      <div className="px-8 py-3 bg-[#0a0c10] border-t border-white/5 shrink-0">
+        <div className="flex justify-between text-[7px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">
+            <span>AI Shot Detection</span>
+            <span>Highlights: 4</span>
         </div>
-        {/* AICI AM PUS onClick PE BUTON 👇 */}
+        <div className="h-1 bg-white/5 rounded-full relative">
+            <div className="absolute inset-y-0 left-0 bg-green-500/20 w-[40%]"></div>
+            {hotspots.map((spot, i) => (
+                <div 
+                    key={i} 
+                    className="absolute h-full w-0.5 bg-green-500 shadow-[0_0_8px_#22c55e]"
+                    style={{ left: `${spot}%` }}
+                ></div>
+            ))}
+        </div>
+      </div>
+
+      {/* Bară detalii jos */}
+      <div className="h-20 bg-[#11141b] border-t border-white/5 flex items-center justify-between px-8 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]"></div>
+          <p className="text-[10px] font-black text-white uppercase tracking-tighter italic">Live Analysis Active</p>
+        </div>
+
         <button 
-          onClick={onOpenDetails} 
-          className="text-xs text-green-400 hover:text-green-300 font-bold uppercase tracking-wider px-3 py-1 bg-green-500/10 rounded-lg hover:bg-green-500/20 transition-all"
+          onClick={onOpenDetails}
+          className="bg-green-500 hover:bg-green-400 text-black px-6 py-2.5 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg flex items-center gap-2"
         >
-          Detalii Analiză 📊
+          <span>Details</span>
+          <span className="text-sm">📊</span>
         </button>
       </div>
-
     </div>
   );
 }

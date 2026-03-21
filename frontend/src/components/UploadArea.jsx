@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import BorderGlow from './BorderGlow';
 
 export default function UploadArea({ onFileSelect }) {
   const [isDragging, setIsDragging] = useState(false);
