@@ -1,6 +1,4 @@
-# 🎾🏓 RallyAI[^1]
-
-![RallyAI logo](rallyaicute.png)
+# RallyAI 🏓💻
 
 Most padel players hit a ceiling because they can't see what they're doing wrong.
 Our solution: PadelAI - a performance platform that turns raw match footage into an analytics dashboard, making professional coatching accessible for the everyday player. 
@@ -42,4 +40,4 @@ pip install opencv-python numpy matplotlib ultralytics
 
 
 
-[^1]: Developed for the PadelCoach AI Hackathon Challenge
+##### Developed for the PadelCoach AI Hackathon Challenge
