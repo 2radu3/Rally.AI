@@ -1,7 +1,7 @@
 # RallyAI 🏓💻
 
 Most padel players hit a ceiling because they can't see what they're doing wrong.
-Our solution: PadelAI - a performance platform that turns raw match footage into an analytics dashboard, making professional coatching accessible for the everyday player. 
+Our solution: RallyAI - a performance platform that turns raw match footage into an analytics dashboard, making professional coatching accessible for the everyday player. 
 
 ## Features
 
@@ -21,23 +21,65 @@ Our solution: PadelAI - a performance platform that turns raw match footage into
 * Features a global shot-cooldown logic to prevent double-counting and ensure clean data during the live demo.
 * Visuals: Vanilla JS (3D Isometric Engine) & Matplotlib (Statistical Reports).
 
-## 📦 Structure
-```text
-├── analyzer.py          # The "brain" — processes video and detects shots
-├── heatmap.html         # The "viewer" — interactive 3D heatmap
-├── requirements.txt     # What you need to install
-└── output/              # Where your PNGs, JSON, and web data end up
-```
-
-## Requirements
+##Setup and run
 
 ### 1. Install dependencies
-Ensure you have Python 3.8+ installed:
 ```bash
-pip install opencv-python numpy matplotlib ultralytics
+cd website
+pip install -r requirements.txt
 ```
 
+### 2. Start the server
+```bash
+python app.py
+```
 
+### 3. Open your browser
+```
+http://localhost:5000
+```
 
+---
 
-##### Developed for the PadelCoach AI Hackathon Challenge
+### Plug in your analyzer.py
+
+In `app.py`, find the `analyze_session` route and replace the mock block:
+
+```python
+# ── PLUG YOUR analyzer.py HERE ──────────────────────────
+# from analyzer import analyze_video
+# result = analyze_video(filepath)
+```
+
+Your `analyze_video(filepath)` function should return a dict with:
+```python
+{
+    'shots_detected': int,
+    'shot_types': {'forehand': int, 'backhand': int, ...},
+    'avg_rally_length': float,      # seconds
+    'court_coverage': float,         # 0-100 %
+    'top_speed_kmh': float,
+    'error_patterns': [str, ...],
+    'drill_suggestions': [str, ...],
+    'heatmap': [                     # list of court positions
+        {'x': float, 'y': float, 'w': float},  # x,y,w all 0.0-1.0
+        ...
+    ],
+}
+```
+
+## File structure
+```
+website/
+├── app.py              ← Flask backend (all API routes)
+├── analyzer.py         ← YOUR existing AI analyzer
+├── requirements.txt
+├── data/
+│   └── sessions.json   ← auto-created, stores all session data
+├── uploads/            ← video files stored here
+├── static/
+│   ├── css/style.css
+│   └── js/app.js
+└── templates/
+    └── index.html
+```
