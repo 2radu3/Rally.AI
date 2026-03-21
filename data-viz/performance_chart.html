@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dark Area Chart (Green)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'DM Sans', sans-serif; }
+    body { box-sizing: border-box; background: #0b0f1a; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="h-full">
+  <div id="app" class="h-full w-full overflow-auto">
+    <div style="max-width:960px; margin:0 auto; padding:40px 24px;">
+      <div id="legend" style="display:flex; gap:24px; margin-bottom:32px; flex-wrap:wrap;"></div>
+      <div style="position:relative; width:100%; aspect-ratio:16/9; min-height:300px;">
+        <canvas id="chart" style="width:100%; height:100%; display:block;"></canvas>
+        <div id="tooltip" style="display:none; position:absolute; pointer-events:none; background:rgba(15,20,35,0.95); border:1px solid rgba(74,222,128,0.3); border-radius:10px; padding:12px 16px; font-size:13px; color:#cbd5e1; z-index:10; backdrop-filter:blur(8px); box-shadow:0 8px 32px rgba(0,0,0,0.4);"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- DATA ---
+    const xLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const seriesData = [
+      { values: [12, 19, 14, 25, 22, 30, 28, 35, 32, 40, 38, 45], color: 'rgba(74,222,128,1)',   fill: 'rgba(74,222,128,0.18)', defaultLabel: 'Series A' },
+      { values: [8,  14, 18, 15, 26, 22, 32, 27, 36, 33, 42, 39], color: 'rgba(74,222,128,0.65)', fill: 'rgba(74,222,128,0.10)', defaultLabel: 'Series B' },
+      { values: [4,  9,  11, 20, 14, 18, 20, 24, 22, 28, 30, 34], color: 'rgba(74,222,128,0.35)', fill: 'rgba(74,222,128,0.05)', defaultLabel: 'Series C' },
+    ];
+
+    // --- CONFIG ---
+    let currentConfig = {
+      chart_title: 'Monthly Performance',
+      series_1_label: 'Volleys',
+      series_2_label: 'Smash',
+      series_3_label: 'Errors',
+      background_color: '#0b0f1a',
+      surface_color: '#151b2e',
+      text_color: '#e2e8f0',
+      primary_action_color: '#4ade80',
+      secondary_action_color: '#22c55e',
+      font_family: 'DM Sans',
+      font_size: 16,
+    };
+
+    // --- CHART DRAWING ---
+    let canvas, ctx, chartRect, currentHover = -1;
+
+    function getSeriesLabels(config) {
+      return [config.series_1_label, config.series_2_label, config.series_3_label];
+    }
+
+    function drawChart(config) {
+      canvas = document.getElementById('chart');
+      ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      const W = rect.width;
+      const H = rect.height;
+
+      const fontFamily = config.font_family + ', sans-serif';
+      const baseSize = config.font_size;
+      const gridColor = 'rgba(148,163,184,0.08)';
+      const axisColor = 'rgba(148,163,184,0.15)';
+
+      const padLeft = 56, padRight = 24, padTop = 16, padBottom = 44;
+      chartRect = { left: padLeft, right: W - padRight, top: padTop, bottom: H - padBottom };
+      const cW = chartRect.right - chartRect.left;
+      const cH = chartRect.bottom - chartRect.top;
+
+      const allVals = seriesData.flatMap(s => s.values);
+      const maxVal = Math.ceil(Math.max(...allVals) / 10) * 10;
+      const yTicks = 5;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Grid lines & Y labels
+      ctx.font = `${baseSize * 0.7}px ${fontFamily}`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (let i = 0; i <= yTicks; i++) {
+        const val = Math.round((maxVal / yTicks) * i);
+        const y = chartRect.bottom - (i / yTicks) * cH;
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(chartRect.left, y);
+        ctx.lineTo(chartRect.right, y);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(148,163,184,0.5)';
+        ctx.fillText(val, chartRect.left - 12, y);
+      }
+
+      // X labels
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const stepX = cW / (xLabels.length - 1);
+      xLabels.forEach((label, i) => {
+        const x = chartRect.left + i * stepX;
+        ctx.fillStyle = 'rgba(148,163,184,0.5)';
+        ctx.font = `${baseSize * 0.7}px ${fontFamily}`;
+        ctx.fillText(label, x, chartRect.bottom + 12);
+      });
+
+      // Axes
+      ctx.strokeStyle = axisColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(chartRect.left, chartRect.top);
+      ctx.lineTo(chartRect.left, chartRect.bottom);
+      ctx.lineTo(chartRect.right, chartRect.bottom);
+      ctx.stroke();
+
+      // Draw series (back to front: index 2, 1, 0)
+      for (let si = seriesData.length - 1; si >= 0; si--) {
+        const s = seriesData[si];
+        const points = s.values.map((v, i) => ({
+          x: chartRect.left + i * stepX,
+          y: chartRect.bottom - (v / maxVal) * cH,
+        }));
+
+        // Smooth curve helper
+        function getControlPoints(pts) {
+          const cps = [];
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[Math.max(0, i - 1)];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[Math.min(pts.length - 1, i + 2)];
+            const tension = 0.3;
+            cps.push({
+              cp1x: p1.x + (p2.x - p0.x) * tension,
+              cp1y: p1.y + (p2.y - p0.y) * tension,
+              cp2x: p2.x - (p3.x - p1.x) * tension,
+              cp2y: p2.y - (p3.y - p1.y) * tension,
+            });
+          }
+          return cps;
+        }
+
+        const cps = getControlPoints(points);
+
+        // Fill area
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, chartRect.bottom);
+        ctx.lineTo(points[0].x, points[0].y);
+        for (let i = 0; i < cps.length; i++) {
+          ctx.bezierCurveTo(cps[i].cp1x, cps[i].cp1y, cps[i].cp2x, cps[i].cp2y, points[i+1].x, points[i+1].y);
+        }
+        ctx.lineTo(points[points.length-1].x, chartRect.bottom);
+        ctx.closePath();
+
+        // Gradient fill
+        const grad = ctx.createLinearGradient(0, chartRect.top, 0, chartRect.bottom);
+        const baseAlpha = si === 0 ? 0.2 : si === 1 ? 0.12 : 0.06;
+        grad.addColorStop(0, `rgba(74,222,128,${baseAlpha})`);
+        grad.addColorStop(1, `rgba(74,222,128,0)`);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Dotted line
+        ctx.setLineDash([3, 6]);
+        ctx.lineDashOffset = 0;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 0; i < cps.length; i++) {
+          ctx.bezierCurveTo(cps[i].cp1x, cps[i].cp1y, cps[i].cp2x, cps[i].cp2y, points[i+1].x, points[i+1].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Data points
+        points.forEach((p, i) => {
+          const isHovered = currentHover === i;
+          const radius = isHovered ? 5 : 3;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = isHovered ? '#4ade80' : s.color;
+          ctx.fill();
+          if (isHovered) {
+            ctx.strokeStyle = 'rgba(74,222,128,0.3)';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+          }
+        });
+      }
+
+      // Hover vertical line
+      if (currentHover >= 0 && currentHover < xLabels.length) {
+        const x = chartRect.left + currentHover * stepX;
+        ctx.strokeStyle = 'rgba(74,222,128,0.15)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, chartRect.top);
+        ctx.lineTo(x, chartRect.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    function renderLegend(config) {
+      const container = document.getElementById('legend');
+      const labels = getSeriesLabels(config);
+      const fontFamily = config.font_family + ', sans-serif';
+      
+      container.innerHTML = '';
+      seriesData.forEach((s, i) => {
+        const item = document.createElement('div');
+        item.style.cssText = `display:flex;align-items:center;gap:8px;`;
+        const dot = document.createElement('span');
+        dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0;`;
+        const text = document.createElement('span');
+        text.style.cssText = `font-size:13px;color:rgba(148,163,184,0.7);font-family:${fontFamily};`;
+        text.textContent = labels[i];
+        item.appendChild(dot);
+        item.appendChild(text);
+        container.appendChild(item);
+      });
+    }
+
+    // Tooltip
+    function handleMouseMove(e) {
+      if (!chartRect) return;
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const stepX = (chartRect.right - chartRect.left) / (xLabels.length - 1);
+      const idx = Math.round((mx - chartRect.left) / stepX);
+      const tooltip = document.getElementById('tooltip');
+
+      if (idx >= 0 && idx < xLabels.length && mx >= chartRect.left - 20 && mx <= chartRect.right + 20 && my >= chartRect.top && my <= chartRect.bottom + 20) {
+        currentHover = idx;
+        drawChart(currentConfig);
+        const labels = getSeriesLabels(currentConfig);
+        let html = `<div style="font-weight:600;color:#e2e8f0;margin-bottom:6px;">${xLabels[idx]}</div>`;
+        seriesData.forEach((s, i) => {
+          html += `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${s.color};"></span>
+            <span>${labels[i]}: <strong style="color:#4ade80;">${s.values[idx]}</strong></span>
+          </div>`;
+        });
+        tooltip.innerHTML = html;
+        tooltip.style.display = 'block';
+        const tx = chartRect.left + idx * stepX;
+        let left = tx + 16;
+        if (left + 180 > rect.width) left = tx - 180;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = (chartRect.top + 8) + 'px';
+      } else {
+        if (currentHover !== -1) {
+          currentHover = -1;
+          drawChart(currentConfig);
+          tooltip.style.display = 'none';
+        }
+      }
+    }
+
+    function handleMouseLeave() {
+      currentHover = -1;
+      drawChart(currentConfig);
+      document.getElementById('tooltip').style.display = 'none';
+    }
+
+    function applyConfig(config) {
+      document.getElementById('app').style.background = config.background_color;
+      const title = document.getElementById('chartTitle');
+      title.textContent = config.chart_title;
+      title.style.color = config.text_color;
+      title.style.fontFamily = config.font_family + ', sans-serif';
+      title.style.fontSize = (config.font_size * 1.75) + 'px';
+
+      renderLegend(config);
+      drawChart(config);
+    }
+
+    // Events & Initial draw
+    document.addEventListener('DOMContentLoaded', () => {
+      canvas = document.getElementById('chart');
+      canvas.addEventListener('mousemove', handleMouseMove);
+      canvas.addEventListener('mouseleave', handleMouseLeave);
+      window.addEventListener('resize', () => {
+        drawChart(currentConfig);
+      });
+      applyConfig(currentConfig);
+    });
+  </script>
+</body>
+</html>
