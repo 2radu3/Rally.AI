@@ -172,7 +172,7 @@ function toCSS([r,g,b], a=1) { return a<1 ? `rgba(${r},${g},${b},${a})` : `rgb($
 
 // Y_OFFSET shifts all activity downward on the grid (0 = no shift, 1 = full height).
 // Increase if activity appears too high / on the net line.
-const Y_OFFSET = 0.12;
+const Y_OFFSET = 0.02;
 
 function processCoordinatesToHeatmap(points) {
   const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
