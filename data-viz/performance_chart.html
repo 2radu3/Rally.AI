@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dark Area Chart</title>
+  <title>Dark Area Chart (Green)</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -15,7 +15,6 @@
 <body class="h-full">
   <div id="app" class="h-full w-full overflow-auto">
     <div style="max-width:960px; margin:0 auto; padding:40px 24px;">
-      <h1 id="chartTitle" style="color:#e2e8f0; font-size:28px; font-weight:700; margin-bottom:8px;">Monthly Performance</h1>
       <div id="legend" style="display:flex; gap:24px; margin-bottom:32px; flex-wrap:wrap;"></div>
       <div style="position:relative; width:100%; aspect-ratio:16/9; min-height:300px;">
         <canvas id="chart" style="width:100%; height:100%; display:block;"></canvas>
@@ -29,22 +28,22 @@
     const xLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     const seriesData = [
-      { values: [12, 19, 14, 25, 22, 30, 28, 35, 32, 40, 38, 45], color: 'rgba(236,72,153,1)',   fill: 'rgba(236,72,153,0.18)', defaultLabel: 'Series A' },
-      { values: [8,  14, 18, 15, 26, 22, 32, 27, 36, 33, 42, 39], color: 'rgba(236,72,153,0.65)', fill: 'rgba(236,72,153,0.10)', defaultLabel: 'Series B' },
-      { values: [4,  9,  11, 20, 14, 18, 20, 24, 22, 28, 30, 34], color: 'rgba(236,72,153,0.35)', fill: 'rgba(236,72,153,0.05)', defaultLabel: 'Series C' },
+      { values: [12, 19, 14, 25, 22, 30, 28, 35, 32, 40, 38, 45], color: 'rgba(74,222,128,1)',   fill: 'rgba(74,222,128,0.18)', defaultLabel: 'Series A' },
+      { values: [8,  14, 18, 15, 26, 22, 32, 27, 36, 33, 42, 39], color: 'rgba(74,222,128,0.65)', fill: 'rgba(74,222,128,0.10)', defaultLabel: 'Series B' },
+      { values: [4,  9,  11, 20, 14, 18, 20, 24, 22, 28, 30, 34], color: 'rgba(74,222,128,0.35)', fill: 'rgba(74,222,128,0.05)', defaultLabel: 'Series C' },
     ];
 
     // --- CONFIG ---
     let currentConfig = {
       chart_title: 'Monthly Performance',
-      series_1_label: 'Series A',
-      series_2_label: 'Series B',
-      series_3_label: 'Series C',
+      series_1_label: 'Volleys',
+      series_2_label: 'Smash',
+      series_3_label: 'Errors',
       background_color: '#0b0f1a',
       surface_color: '#151b2e',
       text_color: '#e2e8f0',
-      primary_action_color: '#ec4899',
-      secondary_action_color: '#ec4899',
+      primary_action_color: '#4ade80',
+      secondary_action_color: '#22c55e',
       font_family: 'DM Sans',
       font_size: 16,
     };
@@ -162,8 +161,8 @@
         // Gradient fill
         const grad = ctx.createLinearGradient(0, chartRect.top, 0, chartRect.bottom);
         const baseAlpha = si === 0 ? 0.2 : si === 1 ? 0.12 : 0.06;
-        grad.addColorStop(0, `rgba(236,72,153,${baseAlpha})`);
-        grad.addColorStop(1, `rgba(236,72,153,0)`);
+        grad.addColorStop(0, `rgba(74,222,128,${baseAlpha})`);
+        grad.addColorStop(1, `rgba(74,222,128,0)`);
         ctx.fillStyle = grad;
         ctx.fill();
 
@@ -186,10 +185,10 @@
           const radius = isHovered ? 5 : 3;
           ctx.beginPath();
           ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-          ctx.fillStyle = isHovered ? '#ec4899' : s.color;
+          ctx.fillStyle = isHovered ? '#4ade80' : s.color;
           ctx.fill();
           if (isHovered) {
-            ctx.strokeStyle = 'rgba(236,72,153,0.3)';
+            ctx.strokeStyle = 'rgba(74,222,128,0.3)';
             ctx.lineWidth = 6;
             ctx.stroke();
           }
@@ -199,7 +198,7 @@
       // Hover vertical line
       if (currentHover >= 0 && currentHover < xLabels.length) {
         const x = chartRect.left + currentHover * stepX;
-        ctx.strokeStyle = 'rgba(236,72,153,0.15)';
+        ctx.strokeStyle = 'rgba(74,222,128,0.15)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();

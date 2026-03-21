@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Padel Court Heatmap</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-
   <style>
     /* ─────────────────────────────────────────────
        RESET & PAGE
@@ -19,34 +18,50 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 20px;
-      padding: 32px 16px;
+      gap: 28px;
+      padding: 40px 16px;
       font-family: 'Space Mono', monospace;
     }
 
     /* ─────────────────────────────────────────────
-       ISOMETRIC SCENE WRAPPER
-       perspective + origin give the 3/4 top-down view.
-       The inner #iso-wrapper applies the two rotation
-       axes that create the isometric tilt.
+       ISOMETRIC SCENE
     ───────────────────────────────────────────── */
     #scene {
       perspective: 1200px;
-      perspective-origin: 50% 20%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      perspective-origin: 50% 25%;
     }
 
-    #iso-wrapper {
+    #iso {
       transform: rotateX(52deg) rotateZ(-45deg);
       transform-style: preserve-3d;
       position: relative;
     }
 
+    #court-canvas {
+      display: block;
+      position: relative;
+    }
+
+    /* ─────────────────────────────────────────────
+       3D ELEMENTS (Walls & Bars)
+    ───────────────────────────────────────────── */
+    .wall {
+      position: absolute;
+      background: rgba(0, 229, 180, 0.05);
+      border: 1px solid rgba(0, 229, 180, 0.35);
+      pointer-events: none;
+    }
+
+    .bar-group {
+      position: absolute;
+      transform-style: preserve-3d;
+      pointer-events: none; /* Let hover pass through to the canvas */
+    }
+
+    .bar-face { position: absolute; }
+
     /* ─────────────────────────────────────────────
        LEGEND BAR
-       Low → Medium → High gradient strip with labels.
     ───────────────────────────────────────────── */
     #legend {
       display: flex;
@@ -71,19 +86,13 @@
       height: 5px;
       border-radius: 3px;
       background: linear-gradient(90deg,
-        #08141e 0%,
-        #0a3450 18%,
-        #0a6455 36%,
-        #14af73 52%,
-        #c3da32 68%,
-        #f59b0a 82%,
-        #ef3c3c 100%
+        #08141e 0%, #0a3450 18%, #0a6455 36%,
+        #14af73 52%, #c3da32 68%, #f59b0a 82%, #ef3c3c 100%
       );
     }
 
     /* ─────────────────────────────────────────────
        TOOLTIP
-       Appears on canvas mousemove, hidden by default.
     ───────────────────────────────────────────── */
     #tooltip {
       position: fixed;
@@ -92,69 +101,33 @@
       transition: opacity 0.15s ease;
       z-index: 999;
       background: #0e1420;
-      border: 1px solid rgba(0,229,180,0.28);
+      border: 1px solid rgba(0, 229, 180, 0.28);
       border-radius: 8px;
       padding: 10px 14px;
       min-width: 130px;
     }
     #tooltip.show { opacity: 1; }
-
-    #tt-zone {
-      font-size: 11px;
-      font-weight: 700;
-      color: #e8eaf0;
-      margin-bottom: 5px;
-    }
-
-    #tt-bar-wrap {
-      height: 3px;
-      border-radius: 2px;
-      background: rgba(255,255,255,0.08);
-      margin-bottom: 6px;
-      overflow: hidden;
-    }
-
-    #tt-bar {
-      height: 100%;
-      border-radius: 2px;
-      /* width + background set dynamically in JS */
-    }
-
-    #tt-pct {
-      font-size: 10px;
-      color: #4a5068;
-    }
+    #tt-zone { font-size: 11px; font-weight: 700; color: #e8eaf0; margin-bottom: 5px; }
+    #tt-bar-wrap { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.08); margin-bottom: 6px; overflow: hidden; }
+    #tt-bar { height: 100%; border-radius: 2px; }
+    #tt-pct { font-size: 10px; color: #4a5068; }
   </style>
 </head>
 <body>
 
-  <!-- ─────────────────────────────────────────────
-       ISOMETRIC SCENE
-       Contains a single <canvas> rotated in 3D.
-       All court drawing happens in JS on this canvas.
-  ───────────────────────────────────────────── -->
   <div id="scene">
-    <div id="iso-wrapper">
+    <div id="iso">
       <canvas id="court-canvas"></canvas>
-    </div>
+      </div>
   </div>
 
-  <!-- ─────────────────────────────────────────────
-       LEGEND
-       Static gradient bar with Low/Med/High labels.
-  ───────────────────────────────────────────── -->
   <div id="legend">
     <div id="legend-labels">
-      <span>Low</span>
-      <span>Medium</span>
-      <span>High</span>
+      <span>Low</span><span>Medium</span><span>High</span>
     </div>
     <div id="legend-bar"></div>
   </div>
 
-  <!-- ─────────────────────────────────────────────
-       TOOLTIP (rendered outside canvas, fixed pos)
-  ───────────────────────────────────────────── -->
   <div id="tooltip">
     <div id="tt-zone"></div>
     <div id="tt-bar-wrap"><div id="tt-bar"></div></div>
@@ -162,38 +135,18 @@
   </div>
 
 <script>
-/* ═══════════════════════════════════════════════════════════
-   SECTION 1 — GRID & CANVAS DIMENSIONS
-   Everything is derived from COLS / ROWS / CELL so you can
-   tweak one number and the whole layout adjusts.
-═══════════════════════════════════════════════════════════ */
-const COLS   = 18;   // number of cells across the court width
-const ROWS   = 26;   // number of cells down the court length
-const CELL   = 10;   // pixel size of each grid cell (pre-3D transform)
-const MAX_H  = 70;   // maximum bar extrusion height in canvas-px
-const WALL_H = 32;   // glass wall height in canvas-px (above/below floor)
-const GAP    = 1.2;  // gap between adjacent bars (px)
+// --- 1. DIMENSIONS ---
+const COLS   = 18;
+const ROWS   = 26;
+const CELL   = 10;
+const MAX_H  = 70;
+const WALL_H = 30;
+const GAP    = 1;
 
-const CW = COLS * CELL;   // total court width in px
-const CH = ROWS * CELL;   // total court height in px
+const CW = COLS * CELL;
+const CH = ROWS * CELL;
 
-// Left padding = WALL_H so the left glass wall fits without clipping
-const PAD_L = WALL_H;
-const PAD_R = 4;
-const PAD_Y = 4;
-
-const CANVAS_W = PAD_L + CW + PAD_R;
-const CANVAS_H = PAD_Y + MAX_H + CH + WALL_H + PAD_Y;
-
-// Y coordinate of the floor surface on the canvas (bars grow upward from here)
-const FLOOR_Y = PAD_Y + MAX_H;
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 2 — COLOR RAMP
-   Multi-stop gradient: dark navy → teal → green → yellow → orange → red.
-   lerpColor(v) takes a value 0–1 and returns [r, g, b].
-═══════════════════════════════════════════════════════════ */
+// --- 2. COLOR RAMP ---
 const COLOR_STOPS = [
   { t: 0,    r: 8,   g: 20,  b: 38  },
   { t: 0.15, r: 8,   g: 52,  b: 80  },
@@ -218,36 +171,17 @@ function lerpColor(v) {
     Math.round(lo.b + (hi.b - lo.b) * t),
   ];
 }
+function darker([r, g, b], f) { return [Math.round(r * f), Math.round(g * f), Math.round(b * f)]; }
+function toCSS([r, g, b], a = 1) { return a < 1 ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`; }
 
-// Multiply each channel by factor f to produce a darker shade
-function darker([r, g, b], f) {
-  return [Math.round(r * f), Math.round(g * f), Math.round(b * f)];
-}
-
-// Build a CSS rgb/rgba string from [r,g,b] + optional alpha
-function toCSS([r, g, b], a = 1) {
-  return a < 1 ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`;
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 3 — HEAT DATA GENERATORS
-   Returns a ROWS×COLS 2-D array of values in [0, 1].
-
-   makeRealistic() — Gaussian hotspots matching real padel
-     movement patterns: back-center, net corners, wall corners.
-   makeRandom()    — fully random noise.
-   makeFlat()      — all cells at near-zero (reset state).
-═══════════════════════════════════════════════════════════ */
+// --- 3. DATA ---
 function makeRealistic() {
   const d = [];
   for (let r = 0; r < ROWS; r++) {
     d[r] = [];
     for (let c = 0; c < COLS; c++) {
-      // Normalized coords: ny 0=back 1=net, nx -1=left 1=right
       const ny = r / (ROWS - 1);
       const nx = (c / (COLS - 1)) * 2 - 1;
-
       const backCenter = 0.95 * Math.exp(-((ny - 0.22) ** 2 / 0.025 + nx ** 2 / 0.12));
       const netLeft    = 0.88 * Math.exp(-((ny - 0.88) ** 2 / 0.012 + (nx + 0.82) ** 2 / 0.03));
       const netRight   = 0.88 * Math.exp(-((ny - 0.88) ** 2 / 0.012 + (nx - 0.82) ** 2 / 0.03));
@@ -262,253 +196,137 @@ function makeRealistic() {
   }
   return d;
 }
+const heat = makeRealistic();
 
-function makeRandom() {
-  return Array.from({ length: ROWS }, () =>
-    Array.from({ length: COLS }, () => Math.round((0.04 + Math.random() * 0.96) * 100) / 100)
-  );
-}
-
-function makeFlat() {
-  return Array.from({ length: ROWS }, () => Array(COLS).fill(0.02));
-}
-
-// Active heat dataset — swap this out to update the visual
-let heat = makeRealistic();
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 4 — CANVAS SETUP
-   Size the <canvas>, grab 2D context, nudge wrapper so the
-   wider left padding doesn't visually shift the court.
-═══════════════════════════════════════════════════════════ */
-const canvas  = document.getElementById('court-canvas');
-canvas.width  = CANVAS_W;
-canvas.height = CANVAS_H;
-canvas.style.display = 'block';
-canvas.style.width   = CANVAS_W + 'px';
-canvas.style.height  = CANVAS_H + 'px';
-
+// --- 4. CANVAS (Floor Only) ---
+const canvas = document.getElementById('court-canvas');
+canvas.width  = CW;
+canvas.height = CH;
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
 const ctx = canvas.getContext('2d');
 
-// Compensate for extra left padding so the court stays visually centred
-document.getElementById('iso-wrapper').style.marginLeft = (-WALL_H / 2) + 'px';
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 5 — DRAW: GLASS WALLS
-   Four transparent walls (no ceiling) surrounding the court.
-   Each wall is a filled rectangle + stroked edges + sheen.
-   Back/left walls face the viewer → brighter stroke.
-   Front/right walls face away  → dimmer stroke.
-═══════════════════════════════════════════════════════════ */
-function drawWalls(wx, wy, ww, wh) {
-  const fill    = 'rgba(0,229,180,0.07)';
-  const edgeBright = 'rgba(0,229,180,0.45)';
-  const edgeDim    = 'rgba(0,229,180,0.22)';
-
-  ctx.lineWidth = 1;
-
-  // ── Back wall (above the court's top edge, rises upward) ──
-  ctx.fillStyle = fill;
-  ctx.fillRect(wx, wy - WALL_H, ww, WALL_H);
-  ctx.strokeStyle = edgeBright;
-  ctx.beginPath();
-  ctx.moveTo(wx,      wy - WALL_H); ctx.lineTo(wx,      wy);       // left edge
-  ctx.moveTo(wx + ww, wy - WALL_H); ctx.lineTo(wx + ww, wy);       // right edge
-  ctx.moveTo(wx,      wy);          ctx.lineTo(wx + ww, wy);       // floor-level base
-  ctx.stroke();
-  // glass sheen: brighter at top, fades to transparent at floor
-  const sheenBack = ctx.createLinearGradient(wx, wy - WALL_H, wx, wy);
-  sheenBack.addColorStop(0, 'rgba(0,229,180,0.10)');
-  sheenBack.addColorStop(1, 'rgba(0,229,180,0.00)');
-  ctx.fillStyle = sheenBack;
-  ctx.fillRect(wx, wy - WALL_H, ww, WALL_H);
-
-  // ── Front wall (below the court's bottom edge, drops downward) ──
-  ctx.fillStyle = fill;
-  ctx.fillRect(wx, wy + wh, ww, WALL_H);
-  ctx.strokeStyle = edgeDim;
-  ctx.beginPath();
-  ctx.moveTo(wx,      wy + wh);           ctx.lineTo(wx + ww, wy + wh);           // floor-level top
-  ctx.moveTo(wx,      wy + wh);           ctx.lineTo(wx,      wy + wh + WALL_H);  // left edge
-  ctx.moveTo(wx + ww, wy + wh);           ctx.lineTo(wx + ww, wy + wh + WALL_H);  // right edge
-  ctx.moveTo(wx,      wy + wh + WALL_H);  ctx.lineTo(wx + ww, wy + wh + WALL_H);  // bottom edge
-  ctx.stroke();
-
-  // ── Left wall (left side of court, spans full height including back/front walls) ──
-  ctx.fillStyle = fill;
-  ctx.fillRect(wx - WALL_H, wy - WALL_H, WALL_H, wh + WALL_H * 2);
-  ctx.strokeStyle = edgeBright;
-  ctx.beginPath();
-  ctx.moveTo(wx - WALL_H, wy - WALL_H);          ctx.lineTo(wx - WALL_H, wy + wh + WALL_H);  // far-left edge
-  ctx.moveTo(wx - WALL_H, wy - WALL_H);          ctx.lineTo(wx,          wy - WALL_H);        // top edge
-  ctx.moveTo(wx - WALL_H, wy + wh + WALL_H);     ctx.lineTo(wx,          wy + wh + WALL_H);  // bottom edge
-  ctx.stroke();
-  // glass sheen: fades left→right
-  const sheenLeft = ctx.createLinearGradient(wx - WALL_H, 0, wx, 0);
-  sheenLeft.addColorStop(0, 'rgba(0,229,180,0.00)');
-  sheenLeft.addColorStop(1, 'rgba(0,229,180,0.06)');
-  ctx.fillStyle = sheenLeft;
-  ctx.fillRect(wx - WALL_H, wy - WALL_H, WALL_H, wh + WALL_H * 2);
-
-  // ── Right wall (right side of court) ──
-  ctx.fillStyle = fill;
-  ctx.fillRect(wx + ww, wy - WALL_H, WALL_H, wh + WALL_H * 2);
-  ctx.strokeStyle = edgeDim;
-  ctx.beginPath();
-  ctx.moveTo(wx + ww + WALL_H, wy - WALL_H);      ctx.lineTo(wx + ww + WALL_H, wy + wh + WALL_H);  // far-right edge
-  ctx.moveTo(wx + ww,          wy - WALL_H);      ctx.lineTo(wx + ww + WALL_H, wy - WALL_H);        // top edge
-  ctx.moveTo(wx + ww,          wy + wh + WALL_H); ctx.lineTo(wx + ww + WALL_H, wy + wh + WALL_H);  // bottom edge
-  ctx.stroke();
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 6 — DRAW: FLOOR SURFACE
-   Subtle tinted fill + border + hairline grid.
-═══════════════════════════════════════════════════════════ */
-function drawFloor(wx, wy, ww, wh) {
-  // Court surface tint
-  ctx.fillStyle = 'rgba(0,100,80,0.10)';
-  ctx.fillRect(wx, wy, ww, wh);
-
-  // Floor border (same bright teal as back/left walls)
-  ctx.strokeStyle = 'rgba(0,229,180,0.45)';
+function drawFloorAndMarkings() {
+  ctx.clearRect(0, 0, CW, CH);
+  ctx.fillStyle = 'rgba(0, 90, 70, 0.12)';
+  ctx.fillRect(0, 0, CW, CH);
+  ctx.strokeStyle = 'rgba(0,229,180,0.50)';
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(wx, wy, ww, wh);
+  ctx.strokeRect(0, 0, CW, CH);
 
-  // Hairline grid
+  // Grid
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 0.5;
-  for (let r = 0; r <= ROWS; r++) {
-    ctx.beginPath();
-    ctx.moveTo(wx,      wy + r * CELL);
-    ctx.lineTo(wx + ww, wy + r * CELL);
-    ctx.stroke();
-  }
-  for (let c = 0; c <= COLS; c++) {
-    ctx.beginPath();
-    ctx.moveTo(wx + c * CELL, wy);
-    ctx.lineTo(wx + c * CELL, wy + wh);
-    ctx.stroke();
-  }
-}
+  for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(CW, r * CELL); ctx.stroke(); }
+  for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, CH); ctx.stroke(); }
 
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 7 — DRAW: COURT MARKINGS
-   Net line (bright), centre vertical, service lines (dashed).
-═══════════════════════════════════════════════════════════ */
-function drawMarkings(wx, wy, ww, wh) {
-  // Net — horizontal at vertical midpoint
-  ctx.strokeStyle = 'rgba(255,255,255,0.60)';
+  // Markings
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(wx,      wy + wh / 2);
-  ctx.lineTo(wx + ww, wy + wh / 2);
-  ctx.stroke();
-
-  // Centre vertical line
+  ctx.beginPath(); ctx.moveTo(0, CH / 2); ctx.lineTo(CW, CH / 2); ctx.stroke(); // Net
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(wx + ww / 2, wy);
-  ctx.lineTo(wx + ww / 2, wy + wh);
-  ctx.stroke();
-
-  // Service lines (dashed) at 28% and 72% of court length
+  ctx.beginPath(); ctx.moveTo(CW / 2, 0); ctx.lineTo(CW / 2, CH); ctx.stroke(); // Center line
   ctx.strokeStyle = 'rgba(255,255,255,0.18)';
   ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(wx, wy + wh * 0.28); ctx.lineTo(wx + ww, wy + wh * 0.28); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(wx, wy + wh * 0.72); ctx.lineTo(wx + ww, wy + wh * 0.72); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, CH * 0.28); ctx.lineTo(CW, CH * 0.28); ctx.stroke(); // Service lines
+  ctx.beginPath(); ctx.moveTo(0, CH * 0.72); ctx.lineTo(CW, CH * 0.72); ctx.stroke();
   ctx.setLineDash([]);
 }
 
+// --- 5. 3D CSS BUILDER ---
+function buildScene() {
+  const iso = document.getElementById('iso');
 
-/* ═══════════════════════════════════════════════════════════
-   SECTION 8 — DRAW: HEAT BARS
-   Painted in painter order (back row first → front row last)
-   so closer bars naturally occlude farther ones.
-
-   Each bar has three faces:
-     • top face   — full brightness colour
-     • front face — 48% darker (faces down toward viewer)
-     • right face — 32% darker thin strip (faces right)
-═══════════════════════════════════════════════════════════ */
-function drawBars(wx, wy) {
+  // Build Bars
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const v = heat[r][c];
-      if (v < 0.02) continue;   // skip near-zero cells
+      if (v < 0.02) continue;
 
-      const h   = v * MAX_H;   // actual bar height in px
+      const h = Math.max(1, v * MAX_H);
       const col = lerpColor(v);
+      const bw = CELL - GAP * 2;
 
-      // Cell position on the canvas floor
-      const x = wx + c * CELL + GAP;
-      const y = wy + r * CELL + GAP;
+      // The bar container, sitting flat on the cell coordinate
+      const group = document.createElement('div');
+      group.className = 'bar-group';
+      group.style.left = (c * CELL + GAP) + 'px';
+      group.style.top  = (r * CELL + GAP) + 'px';
+      group.style.width  = bw + 'px';
+      group.style.height = bw + 'px';
 
-      const bw     = CELL - GAP * 2;   // bar footprint width
-      const bd     = CELL - GAP * 2;   // bar footprint depth
-      const barTop = y - h;            // top of the extruded column
+      // Top Cap (pushed up into the Z axis)
+      const topFace = document.createElement('div');
+      topFace.className = 'bar-face';
+      topFace.style.width = '100%'; topFace.style.height = '100%';
+      topFace.style.background = toCSS(col);
+      topFace.style.transform = `translateZ(${h}px)`;
+      topFace.style.border = '1px solid rgba(255,255,255,0.1)';
 
-      // Front face: full-height rectangle below the top face
-      ctx.fillStyle = toCSS(darker(col, 0.48));
-      ctx.fillRect(x, barTop + bd, bw, h);
+      // Front Face (hinged at the top edge of the cell, dropping down to floor)
+      const frontFace = document.createElement('div');
+      frontFace.className = 'bar-face';
+      frontFace.style.left = '0'; frontFace.style.top = bw + 'px';
+      frontFace.style.width = bw + 'px'; frontFace.style.height = h + 'px';
+      frontFace.style.transformOrigin = 'top';
+      frontFace.style.transform = 'rotateX(90deg)';
+      frontFace.style.background = toCSS(darker(col, 0.6));
 
-      // Right face: narrow vertical strip on the right edge
-      const rw = Math.max(1, Math.round(bw * 0.18));
-      ctx.fillStyle = toCSS(darker(col, 0.32));
-      ctx.fillRect(x + bw - rw, barTop + 1, rw, h + bd - 1);
+      // Right Face (hinged at the left edge of its starting point, dropping to floor)
+      const rightFace = document.createElement('div');
+      rightFace.className = 'bar-face';
+      rightFace.style.left = bw + 'px'; rightFace.style.top = '0';
+      rightFace.style.width = h + 'px'; rightFace.style.height = bw + 'px';
+      rightFace.style.transformOrigin = 'left';
+      rightFace.style.transform = 'rotateY(-90deg)';
+      rightFace.style.background = toCSS(darker(col, 0.4));
 
-      // Top face: the bright cap
-      ctx.fillStyle = toCSS(col);
-      ctx.fillRect(x, barTop, bw, bd);
-
-      // Optional highlight streak on tall bars
-      if (v > 0.5) {
-        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-        ctx.fillRect(x + 1, barTop + 1, bw - 2, 2);
-      }
+      group.appendChild(topFace);
+      group.appendChild(frontFace);
+      group.appendChild(rightFace);
+      iso.appendChild(group);
     }
   }
+
+  // Build Walls (Appended after bars so glass transparency draws over them nicely)
+  function makeWall(styles) {
+    const w = document.createElement('div');
+    w.className = 'wall';
+    Object.assign(w.style, styles);
+    iso.appendChild(w);
+  }
+
+  // Back wall
+  makeWall({
+    left: '0px', top: '0px', width: CW + 'px', height: WALL_H + 'px',
+    transformOrigin: 'top center', transform: 'rotateX(90deg)'
+  });
+  // Front wall
+  makeWall({
+    left: '0px', top: (CH - WALL_H) + 'px', width: CW + 'px', height: WALL_H + 'px',
+    transformOrigin: 'bottom center', transform: 'rotateX(-90deg)'
+  });
+  // Left wall
+  makeWall({
+    left: '0px', top: '0px', width: WALL_H + 'px', height: CH + 'px',
+    transformOrigin: 'left center', transform: 'rotateY(-90deg)'
+  });
+  // Right wall
+  makeWall({
+    left: (CW - WALL_H) + 'px', top: '0px', width: WALL_H + 'px', height: CH + 'px',
+    transformOrigin: 'right center', transform: 'rotateY(90deg)'
+  });
 }
 
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 9 — MAIN RENDER FUNCTION
-   Clears canvas then calls each draw section in correct order:
-   walls first (background), floor, markings, then bars on top.
-═══════════════════════════════════════════════════════════ */
-function render() {
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // Court origin on canvas: floor starts at (PAD_L, FLOOR_Y)
-  const wx = PAD_L;
-  const wy = FLOOR_Y;
-
-  drawWalls(wx, wy, CW, CH);
-  drawFloor(wx, wy, CW, CH);
-  drawMarkings(wx, wy, CW, CH);
-  drawBars(wx, wy);
-}
-
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 10 — TOOLTIP
-   Reads mouse position on the canvas, maps it back to a grid
-   cell, and shows zone name + activity % in a floating panel.
-═══════════════════════════════════════════════════════════ */
+// --- 6. TOOLTIP ---
 const tooltip = document.getElementById('tooltip');
 const ttZone  = document.getElementById('tt-zone');
 const ttBar   = document.getElementById('tt-bar');
 const ttPct   = document.getElementById('tt-pct');
 
-// Human-readable row zone names (indexed by row number)
 const ROW_NAMES = [
-  'Back Wall','Back Wall',
-  'Back','Back','Back',
+  'Back Wall','Back Wall', 'Back','Back','Back',
   'Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid',
   'Front','Front','Front','Front','Front','Front',
   'Net','Net','Net','Net','Net','Net',
@@ -516,19 +334,15 @@ const ROW_NAMES = [
 const colZone = c => c < COLS / 3 ? 'Left' : c < (COLS * 2 / 3) ? 'Centre' : 'Right';
 
 canvas.addEventListener('mousemove', e => {
-  const rect = canvas.getBoundingClientRect();
-  // Scale mouse coords to canvas pixel space
-  const cx = (e.clientX - rect.left) * (canvas.width  / rect.width);
-  const cy = (e.clientY - rect.top)  * (canvas.height / rect.height);
-
-  const col = Math.floor((cx - PAD_L)   / CELL);
-  const row = Math.floor((cy - FLOOR_Y) / CELL);
+  // e.offsetX/Y automatically un-projects the 3D mouse position perfectly
+  const col = Math.floor(e.offsetX / CELL);
+  const row = Math.floor(e.offsetY / CELL);
 
   if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
     const v = heat[row][col];
     const [R, G, B] = lerpColor(v);
 
-    ttZone.textContent = (ROW_NAMES[Math.min(row, ROW_NAMES.length - 1)] || 'Zone') + ' · ' + colZone(col);
+    ttZone.textContent     = (ROW_NAMES[Math.min(row, ROW_NAMES.length - 1)] || 'Zone') + ' · ' + colZone(col);
     ttBar.style.width      = (v * 100) + '%';
     ttBar.style.background = `rgb(${R},${G},${B})`;
     ttPct.textContent      = 'Activity: ' + Math.round(v * 100) + '%';
@@ -540,14 +354,11 @@ canvas.addEventListener('mousemove', e => {
     tooltip.classList.remove('show');
   }
 });
-
 canvas.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
 
-
-/* ═══════════════════════════════════════════════════════════
-   SECTION 11 — INIT
-═══════════════════════════════════════════════════════════ */
-render();
+// --- INIT ---
+drawFloorAndMarkings();
+buildScene();
 </script>
 </body>
 </html>
