@@ -175,28 +175,58 @@ function darker([r, g, b], f) { return [Math.round(r * f), Math.round(g * f), Ma
 function toCSS([r, g, b], a = 1) { return a < 1 ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`; }
 
 // --- 3. DATA ---
-function makeRealistic() {
-  const d = [];
-  for (let r = 0; r < ROWS; r++) {
-    d[r] = [];
-    for (let c = 0; c < COLS; c++) {
-      const ny = r / (ROWS - 1);
-      const nx = (c / (COLS - 1)) * 2 - 1;
-      const backCenter = 0.95 * Math.exp(-((ny - 0.22) ** 2 / 0.025 + nx ** 2 / 0.12));
-      const netLeft    = 0.88 * Math.exp(-((ny - 0.88) ** 2 / 0.012 + (nx + 0.82) ** 2 / 0.03));
-      const netRight   = 0.88 * Math.exp(-((ny - 0.88) ** 2 / 0.012 + (nx - 0.82) ** 2 / 0.03));
-      const wallLeft   = 0.72 * Math.exp(-((ny - 0.04) ** 2 / 0.008 + (nx + 0.78) ** 2 / 0.03));
-      const wallRight  = 0.72 * Math.exp(-((ny - 0.04) ** 2 / 0.008 + (nx - 0.78) ** 2 / 0.03));
-      const midField   = 0.30 * Math.exp(-((ny - 0.50) ** 2 / 0.06  + nx ** 2 / 0.25));
+// --- 3. DATA: COORDINATE PROCESSOR ---
 
-      let v = backCenter + netLeft + netRight + wallLeft + wallRight + midField;
-      v = Math.min(1, v) * 0.90 + Math.random() * 0.10;
-      d[r][c] = Math.round(v * 100) / 100;
+/**
+ * Converts a list of raw coordinates into a 2D Heatmap Grid.
+ * @param {Array} points - List of {x, y} objects. 
+ * Assumes x is [0 to COLS] and y is [0 to ROWS].
+ */
+function processCoordinatesToHeatmap(points) {
+  // 1. Initialize an empty grid (all zeros)
+  const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+  points.forEach(p => {
+    const col = Math.floor(p.x);
+    const row = Math.floor(p.y);
+
+    // 2. Add "Heat" to the specific cell and its neighbors for a smooth look
+    // This creates a 3x3 "glow" around the point
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = row + dr;
+        const nc = col + dc;
+
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+          // Points closer to the center get more heat
+          const intensity = (dr === 0 && dc === 0) ? 0.4 : 0.15;
+          grid[nr][nc] += intensity;
+        }
+      }
+    }
+  });
+
+  // 3. Normalize: Ensure no cell exceeds 1.0 (100% activity)
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c] = Math.min(1, grid[r][c]);
     }
   }
-  return d;
+
+  return grid;
 }
-const heat = makeRealistic();
+
+// --- EXAMPLE USAGE ---
+// This is where your video analyzer would plug in its results:
+const rawMatchData = [
+  { x: 2,  y: 2 }, { x: 2,  y: 3 },  // Back Left corner
+  { x: 15, y: 24 }, { x: 16, y: 25 }, // Front Right (Net)
+  { x: 9,  y: 13 }, { x: 9,  y: 12 }, // Middle / T-Zone
+  { x: 2,  y: 22 }, { x: 3,  y: 21 }, // Front Left
+];
+
+// Generate the heatmap from the list
+const heat = processCoordinatesToHeatmap(rawMatchData);
 
 // --- 4. CANVAS (Floor Only) ---
 const canvas = document.getElementById('court-canvas');
