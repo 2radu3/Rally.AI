@@ -186,6 +186,31 @@ def generate_heatmap(movement_positions, shot_detections, output_path, heatmap_s
     plt.style.use('default')   # reset so other plots aren't affected
     print(f"✅ Heatmap saved: {output_path}")
 
+def export_for_web_heatmap(movement_positions, output_path='web_input.txt', cols=26, rows=40):
+    """
+    Flattens multi-player movement data and scales it for the 3D web heatmap.
+    """
+    combined_data = []
+    
+    # Iterate through all tracked players
+    for pid, positions in movement_positions.items():
+        for pos in positions:
+            # Scale normalized 0-1 coords to the JS Grid dimensions
+            scaled_x = round(pos['x'] * cols, 4)
+            scaled_y = round(pos['y'] * rows, 4)
+            
+            combined_data.append({
+                "x": scaled_x,
+                "y": scaled_y,
+                "duration": 0.03
+            })
+ 
+    # Write the file in the exact JS variable format requested
+    with open(output_path, 'w') as f:
+        f.write("const rawMatchData = " + json.dumps(combined_data) + ";")
+    
+    print(f"✅ Web heatmap data exported: {output_path} ({len(combined_data)} points)")
+
 
 # ─────────────────────────────────────────────
 # MAIN
@@ -369,6 +394,8 @@ def main():
     print("   • shots_over_time.png")
     print("   • analysis.json")
 
+    export_for_web_heatmap(movement_positions, cols=26, rows=40)
+    print("\nS-a creat fisierul cu locatii")
 
 if __name__ == "__main__":
     main()
