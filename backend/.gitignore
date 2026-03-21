@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+
+node_modules/
+.next/
+dist/
+build/
+
+
+temp_*.mp4
+temp_*.avi
+
+.DS_Store
+.vscode/
