@@ -6,45 +6,41 @@
   <title>Padel Court Heatmap</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
-    /* ─────────────────────────────────────────────
-       RESET & PAGE
-    ───────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       background: #080b10;
       min-height: 100vh;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
       justify-content: center;
-      gap: 28px;
+      gap: 60px;
       padding: 40px 16px;
       font-family: 'Space Mono', monospace;
+      /* prevent text selection while dragging */
+      user-select: none;
     }
 
-    /* ─────────────────────────────────────────────
-       ISOMETRIC SCENE
-    ───────────────────────────────────────────── */
+    /* ── Scene: perspective container ── */
     #scene {
       perspective: 1200px;
       perspective-origin: 50% 25%;
+      /* cursor changes when dragging */
+      cursor: grab;
     }
+    #scene.dragging { cursor: grabbing; }
 
+    /* ── iso: the element we rotate ── */
     #iso {
-      transform: rotateX(52deg) rotateZ(-45deg);
       transform-style: preserve-3d;
       position: relative;
+      /* transition only when NOT dragging for a smooth snap on release */
+      transition: transform 0.05s linear;
     }
 
-    #court-canvas {
-      display: block;
-      position: relative;
-    }
+    #court-canvas { display: block; position: relative; }
 
-    /* ─────────────────────────────────────────────
-       3D ELEMENTS (Walls & Bars)
-    ───────────────────────────────────────────── */
     .wall {
       position: absolute;
       background: rgba(0, 229, 180, 0.05);
@@ -55,56 +51,46 @@
     .bar-group {
       position: absolute;
       transform-style: preserve-3d;
-      pointer-events: none; /* Let hover pass through to the canvas */
+      pointer-events: none;
     }
-
     .bar-face { position: absolute; }
 
-    /* ─────────────────────────────────────────────
-       LEGEND BAR
-    ───────────────────────────────────────────── */
+    /* ── Legend ── */
     #legend {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      width: 260px;
+      width: 200px;
+      margin-bottom: 200px;
     }
-
-    #legend-labels {
-      display: flex;
-      justify-content: space-between;
-    }
-
-    #legend-labels span {
-      font-size: 9px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #4a5068;
-    }
-
+    #legend-labels { display: flex; justify-content: space-between; }
+    #legend-labels span { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #4a5068; }
     #legend-bar {
-      height: 5px;
-      border-radius: 3px;
+      height: 5px; border-radius: 3px;
       background: linear-gradient(90deg,
         #08141e 0%, #0a3450 18%, #0a6455 36%,
         #14af73 52%, #c3da32 68%, #f59b0a 82%, #ef3c3c 100%
       );
     }
 
-    /* ─────────────────────────────────────────────
-       TOOLTIP
-    ───────────────────────────────────────────── */
-    #tooltip {
+    /* ── Hint label ── */
+    #hint {
       position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      color: #2a3050;
+      letter-spacing: 0.1em;
       pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-      z-index: 999;
-      background: #0e1420;
-      border: 1px solid rgba(0, 229, 180, 0.28);
-      border-radius: 8px;
-      padding: 10px 14px;
-      min-width: 130px;
+    }
+
+    /* ── Tooltip ── */
+    #tooltip {
+      position: fixed; pointer-events: none; opacity: 0;
+      transition: opacity 0.15s ease; z-index: 999;
+      background: #0e1420; border: 1px solid rgba(0,229,180,0.28);
+      border-radius: 8px; padding: 10px 14px; min-width: 130px;
     }
     #tooltip.show { opacity: 1; }
     #tt-zone { font-size: 11px; font-weight: 700; color: #e8eaf0; margin-bottom: 5px; }
@@ -118,7 +104,7 @@
   <div id="scene">
     <div id="iso">
       <canvas id="court-canvas"></canvas>
-      </div>
+    </div>
   </div>
 
   <div id="legend">
@@ -134,19 +120,27 @@
     <div id="tt-pct"></div>
   </div>
 
+  <div id="hint">DRAG TO ROTATE &nbsp;·&nbsp; SCROLL TO ZOOM</div>
+
 <script>
-// --- 1. DIMENSIONS ---
-const COLS   = 18;
-const ROWS   = 26;
+// ═══════════════════════════════════════════════════════
+// 1. DIMENSIONS
+// ═══════════════════════════════════════════════════════
+const COLS   = 26;
+const ROWS   = 40;
 const CELL   = 10;
-const MAX_H  = 70;
+const MAX_H  = 80;
 const WALL_H = 30;
 const GAP    = 1;
 
 const CW = COLS * CELL;
 const CH = ROWS * CELL;
 
-// --- 2. COLOR RAMP ---
+window.heat = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+
+// ═══════════════════════════════════════════════════════
+// 2. COLOR RAMP
+// ═══════════════════════════════════════════════════════
 const COLOR_STOPS = [
   { t: 0,    r: 8,   g: 20,  b: 38  },
   { t: 0.15, r: 8,   g: 52,  b: 80  },
@@ -160,9 +154,7 @@ const COLOR_STOPS = [
 function lerpColor(v) {
   let lo = COLOR_STOPS[0], hi = COLOR_STOPS[COLOR_STOPS.length - 1];
   for (let i = 0; i < COLOR_STOPS.length - 1; i++) {
-    if (v >= COLOR_STOPS[i].t && v <= COLOR_STOPS[i + 1].t) {
-      lo = COLOR_STOPS[i]; hi = COLOR_STOPS[i + 1]; break;
-    }
+    if (v >= COLOR_STOPS[i].t && v <= COLOR_STOPS[i + 1].t) { lo = COLOR_STOPS[i]; hi = COLOR_STOPS[i + 1]; break; }
   }
   const t = lo.t === hi.t ? 0 : (v - lo.t) / (hi.t - lo.t);
   return [
@@ -171,224 +163,259 @@ function lerpColor(v) {
     Math.round(lo.b + (hi.b - lo.b) * t),
   ];
 }
-function darker([r, g, b], f) { return [Math.round(r * f), Math.round(g * f), Math.round(b * f)]; }
-function toCSS([r, g, b], a = 1) { return a < 1 ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`; }
+function darker([r,g,b], f) { return [Math.round(r*f), Math.round(g*f), Math.round(b*f)]; }
+function toCSS([r,g,b], a=1) { return a<1 ? `rgba(${r},${g},${b},${a})` : `rgb(${r},${g},${b})`; }
 
-// --- 3. DATA ---
-// --- 3. DATA: COORDINATE PROCESSOR ---
-
-/**
- * Converts a list of raw coordinates into a 2D Heatmap Grid.
- * @param {Array} points - List of {x, y} objects. 
- * Assumes x is [0 to COLS] and y is [0 to ROWS].
- */
+// ═══════════════════════════════════════════════════════
+// 3. DATA PROCESSING
+// ═══════════════════════════════════════════════════════
 function processCoordinatesToHeatmap(points) {
-  // 1. Initialize an empty grid (all zeros)
   const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
 
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   points.forEach(p => {
-    const col = Math.floor(p.x);
-    const row = Math.floor(p.y);
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  });
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
 
-    // 2. Add "Heat" to the specific cell and its neighbors for a smooth look
-    // This creates a 3x3 "glow" around the point
+  points.forEach(p => {
+    const col = Math.min(COLS-1, Math.floor(((p.x-minX)/rangeX)*COLS));
+    const row = Math.min(ROWS-1, Math.floor(((p.y-minY)/rangeY)*ROWS));
+    const weight = (p.duration || 0.03) * 5.0;
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
-        const nr = row + dr;
-        const nc = col + dc;
-
-        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
-          // Points closer to the center get more heat
-          const intensity = (dr === 0 && dc === 0) ? 0.4 : 0.15;
-          grid[nr][nc] += intensity;
+        const nr = row+dr, nc = col+dc;
+        if (nr>=0 && nr<ROWS && nc>=0 && nc<COLS) {
+          grid[nr][nc] += weight * ((dr===0 && dc===0) ? 1.0 : 0.3);
         }
       }
     }
   });
 
-  // 3. Normalize: Ensure no cell exceeds 1.0 (100% activity)
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      grid[r][c] = Math.min(1, grid[r][c]);
-    }
-  }
-
+  let maxHeat = 0;
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) if (grid[r][c]>maxHeat) maxHeat=grid[r][c];
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) grid[r][c] = maxHeat>0 ? Math.min(1, grid[r][c]/(maxHeat*0.8)) : 0;
   return grid;
 }
 
-// --- EXAMPLE USAGE ---
-// This is where your video analyzer would plug in its results:
-const rawMatchData = [
-  { x: 2,  y: 2 }, { x: 2,  y: 3 },  // Back Left corner
-  { x: 15, y: 24 }, { x: 16, y: 25 }, // Front Right (Net)
-  { x: 9,  y: 13 }, { x: 9,  y: 12 }, // Middle / T-Zone
-  { x: 2,  y: 22 }, { x: 3,  y: 21 }, // Front Left
-];
+async function loadAnalyzerData() {
+  try {
+    const response = await fetch('web_input.txt');
+    if (!response.ok) throw new Error("File not found");
+    let text = await response.text();
+    text = text.replace(/const\s+rawMatchData\s*=\s*/, '');
+    text = text.replace(/;\s*$/, '');
+    text = text.replace(/np\.float32\((.*?)\)/g, '$1');
+    text = text.replace(/'/g, '"');
+    const rawMatchData = JSON.parse(text);
+    console.log(`✅ Loaded ${rawMatchData.length} points`);
+    window.heat = processCoordinatesToHeatmap(rawMatchData);
+    renderAll();
+  } catch (e) {
+    console.error("❌ Failed to load web_input.txt:", e);
+  }
+}
 
-// Generate the heatmap from the list
-const heat = processCoordinatesToHeatmap(rawMatchData);
-
-// --- 4. CANVAS (Floor Only) ---
+// ═══════════════════════════════════════════════════════
+// 4. CANVAS
+// ═══════════════════════════════════════════════════════
 const canvas = document.getElementById('court-canvas');
 canvas.width  = CW;
 canvas.height = CH;
-canvas.style.width  = CW + 'px';
-canvas.style.height = CH + 'px';
 const ctx = canvas.getContext('2d');
 
 function drawFloorAndMarkings() {
   ctx.clearRect(0, 0, CW, CH);
-  ctx.fillStyle = 'rgba(0, 90, 70, 0.12)';
-  ctx.fillRect(0, 0, CW, CH);
-  ctx.strokeStyle = 'rgba(0,229,180,0.50)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(0, 0, CW, CH);
-
-  // Grid
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 0.5;
-  for (let r = 0; r <= ROWS; r++) { ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(CW, r * CELL); ctx.stroke(); }
-  for (let c = 0; c <= COLS; c++) { ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, CH); ctx.stroke(); }
-
-  // Markings
-  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(0, CH / 2); ctx.lineTo(CW, CH / 2); ctx.stroke(); // Net
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(CW / 2, 0); ctx.lineTo(CW / 2, CH); ctx.stroke(); // Center line
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath(); ctx.moveTo(0, CH * 0.28); ctx.lineTo(CW, CH * 0.28); ctx.stroke(); // Service lines
-  ctx.beginPath(); ctx.moveTo(0, CH * 0.72); ctx.lineTo(CW, CH * 0.72); ctx.stroke();
+  ctx.fillStyle = 'rgba(0,90,70,0.12)'; ctx.fillRect(0,0,CW,CH);
+  ctx.strokeStyle = 'rgba(0,229,180,0.50)'; ctx.lineWidth = 1.5; ctx.strokeRect(0,0,CW,CH);
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
+  for (let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(CW,r*CELL);ctx.stroke();}
+  for (let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,CH);ctx.stroke();}
+  ctx.strokeStyle='rgba(255,255,255,0.65)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,CH/2);ctx.lineTo(CW,CH/2);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.22)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(CW/2,0);ctx.lineTo(CW/2,CH);ctx.stroke();
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(0,CH*0.28);ctx.lineTo(CW,CH*0.28);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,CH*0.72);ctx.lineTo(CW,CH*0.72);ctx.stroke();
   ctx.setLineDash([]);
 }
 
-// --- 5. 3D CSS BUILDER ---
+// ═══════════════════════════════════════════════════════
+// 5. 3D SCENE
+// ═══════════════════════════════════════════════════════
 function buildScene() {
   const iso = document.getElementById('iso');
+  document.querySelectorAll('.bar-group,.wall').forEach(el => el.remove());
 
-  // Build Bars
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const v = heat[r][c];
-      if (v < 0.02) continue;
-
-      const h = Math.max(1, v * MAX_H);
+  for (let r=0;r<ROWS;r++) {
+    for (let c=0;c<COLS;c++) {
+      const v = window.heat[r][c];
+      if (v < 0.01) continue;
+      const h = Math.max(2, v*MAX_H);
       const col = lerpColor(v);
-      const bw = CELL - GAP * 2;
+      const bw = CELL - GAP*2;
 
-      // The bar container, sitting flat on the cell coordinate
       const group = document.createElement('div');
       group.className = 'bar-group';
-      group.style.left = (c * CELL + GAP) + 'px';
-      group.style.top  = (r * CELL + GAP) + 'px';
-      group.style.width  = bw + 'px';
-      group.style.height = bw + 'px';
+      group.style.left   = (c*CELL+GAP)+'px';
+      group.style.top    = (r*CELL+GAP)+'px';
+      group.style.width  = bw+'px';
+      group.style.height = bw+'px';
 
-      // Top Cap (pushed up into the Z axis)
-      const topFace = document.createElement('div');
-      topFace.className = 'bar-face';
-      topFace.style.width = '100%'; topFace.style.height = '100%';
-      topFace.style.background = toCSS(col);
-      topFace.style.transform = `translateZ(${h}px)`;
-      topFace.style.border = '1px solid rgba(255,255,255,0.1)';
-
-      // Front Face (hinged at the top edge of the cell, dropping down to floor)
-      const frontFace = document.createElement('div');
-      frontFace.className = 'bar-face';
-      frontFace.style.left = '0'; frontFace.style.top = bw + 'px';
-      frontFace.style.width = bw + 'px'; frontFace.style.height = h + 'px';
-      frontFace.style.transformOrigin = 'top';
-      frontFace.style.transform = 'rotateX(90deg)';
-      frontFace.style.background = toCSS(darker(col, 0.6));
-
-      // Right Face (hinged at the left edge of its starting point, dropping to floor)
-      const rightFace = document.createElement('div');
-      rightFace.className = 'bar-face';
-      rightFace.style.left = bw + 'px'; rightFace.style.top = '0';
-      rightFace.style.width = h + 'px'; rightFace.style.height = bw + 'px';
-      rightFace.style.transformOrigin = 'left';
-      rightFace.style.transform = 'rotateY(-90deg)';
-      rightFace.style.background = toCSS(darker(col, 0.4));
-
-      group.appendChild(topFace);
-      group.appendChild(frontFace);
-      group.appendChild(rightFace);
+      [
+        { width:'100%', height:'100%', background:toCSS(col), transform:`translateZ(${h}px)`, border:'1px solid rgba(255,255,255,0.1)' },
+        { left:'0', top:bw+'px', width:bw+'px', height:h+'px', transformOrigin:'top', transform:'rotateX(90deg)', background:toCSS(darker(col,0.6)) },
+        { left:bw+'px', top:'0', width:h+'px', height:bw+'px', transformOrigin:'left', transform:'rotateY(-90deg)', background:toCSS(darker(col,0.4)) },
+      ].forEach(s => {
+        const face = document.createElement('div');
+        face.className = 'bar-face';
+        Object.assign(face.style, s);
+        group.appendChild(face);
+      });
       iso.appendChild(group);
     }
   }
 
-  // Build Walls (Appended after bars so glass transparency draws over them nicely)
-  function makeWall(styles) {
-    const w = document.createElement('div');
-    w.className = 'wall';
-    Object.assign(w.style, styles);
-    iso.appendChild(w);
-  }
-
-  // Back wall
-  makeWall({
-    left: '0px', top: '0px', width: CW + 'px', height: WALL_H + 'px',
-    transformOrigin: 'top center', transform: 'rotateX(90deg)'
-  });
-  // Front wall
-  makeWall({
-    left: '0px', top: (CH - WALL_H) + 'px', width: CW + 'px', height: WALL_H + 'px',
-    transformOrigin: 'bottom center', transform: 'rotateX(-90deg)'
-  });
-  // Left wall
-  makeWall({
-    left: '0px', top: '0px', width: WALL_H + 'px', height: CH + 'px',
-    transformOrigin: 'left center', transform: 'rotateY(-90deg)'
-  });
-  // Right wall
-  makeWall({
-    left: (CW - WALL_H) + 'px', top: '0px', width: WALL_H + 'px', height: CH + 'px',
-    transformOrigin: 'right center', transform: 'rotateY(90deg)'
-  });
+  const makeWall = s => { const w=document.createElement('div'); w.className='wall'; Object.assign(w.style,s); iso.appendChild(w); };
+  makeWall({ left:'0px', top:'0px', width:CW+'px', height:WALL_H+'px', transformOrigin:'top center', transform:'rotateX(90deg)' });
+  makeWall({ left:'0px', top:(CH-WALL_H)+'px', width:CW+'px', height:WALL_H+'px', transformOrigin:'bottom center', transform:'rotateX(-90deg)' });
+  makeWall({ left:'0px', top:'0px', width:WALL_H+'px', height:CH+'px', transformOrigin:'left center', transform:'rotateY(-90deg)' });
+  makeWall({ left:(CW-WALL_H)+'px', top:'0px', width:WALL_H+'px', height:CH+'px', transformOrigin:'right center', transform:'rotateY(90deg)' });
 }
 
-// --- 6. TOOLTIP ---
+function renderAll() { drawFloorAndMarkings(); buildScene(); }
+
+// ═══════════════════════════════════════════════════════
+// 6. CAMERA — drag to rotate, scroll to zoom
+//    rotX: tilt forward/back (clamped so court never flips)
+//    rotZ: spin left/right
+//    scale: zoom in/out
+// ═══════════════════════════════════════════════════════
+let rotX  = 52;    // degrees — default isometric tilt
+let rotZ  = -45;   // degrees — default isometric spin
+let scale = 1.0;   // zoom multiplier
+
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+const scene = document.getElementById('scene');
+const iso   = document.getElementById('iso');
+
+function applyTransform() {
+  iso.style.transform = `scale(${scale}) rotateX(${rotX}deg) rotateZ(${rotZ}deg)`;
+}
+
+// ── Mouse drag ──────────────────────────────────────────
+scene.addEventListener('mousedown', e => {
+  isDragging = true;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+  scene.classList.add('dragging');
+  iso.style.transition = 'none';   // remove transition while dragging for instant response
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastMouseX;
+  const dy = e.clientY - lastMouseY;
+  lastMouseX = e.clientX;
+  lastMouseY = e.clientY;
+
+  // Horizontal drag → spin around Z axis
+  rotZ += dx * 0.4;
+
+  // Vertical drag → tilt around X axis, clamped to [5°, 89°] so court stays visible
+  rotX = Math.min(89, Math.max(5, rotX - dy * 0.4));
+
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  scene.classList.remove('dragging');
+  iso.style.transition = 'transform 0.05s linear';
+});
+
+// ── Touch drag (mobile) ─────────────────────────────────
+scene.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    lastMouseX = e.touches[0].clientX;
+    lastMouseY = e.touches[0].clientY;
+    iso.style.transition = 'none';
+  }
+}, { passive: true });
+
+window.addEventListener('touchmove', e => {
+  if (!isDragging || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - lastMouseX;
+  const dy = e.touches[0].clientY - lastMouseY;
+  lastMouseX = e.touches[0].clientX;
+  lastMouseY = e.touches[0].clientY;
+  rotZ += dx * 0.4;
+  rotX = Math.min(89, Math.max(5, rotX - dy * 0.4));
+  applyTransform();
+}, { passive: true });
+
+window.addEventListener('touchend', () => {
+  isDragging = false;
+  iso.style.transition = 'transform 0.05s linear';
+});
+
+// ── Scroll to zoom ──────────────────────────────────────
+scene.addEventListener('wheel', e => {
+  e.preventDefault();
+  // Normalise across trackpad (small delta) and mouse wheel (large delta)
+  const delta = e.deltaY > 0 ? -0.06 : 0.06;
+  scale = Math.min(3.0, Math.max(0.3, scale + delta));
+  applyTransform();
+}, { passive: false });
+
+// Apply the initial default transform
+applyTransform();
+
+// ═══════════════════════════════════════════════════════
+// 7. TOOLTIP
+// ═══════════════════════════════════════════════════════
 const tooltip = document.getElementById('tooltip');
 const ttZone  = document.getElementById('tt-zone');
 const ttBar   = document.getElementById('tt-bar');
 const ttPct   = document.getElementById('tt-pct');
 
-const ROW_NAMES = [
-  'Back Wall','Back Wall', 'Back','Back','Back',
-  'Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid',
-  'Front','Front','Front','Front','Front','Front',
-  'Net','Net','Net','Net','Net','Net',
-];
-const colZone = c => c < COLS / 3 ? 'Left' : c < (COLS * 2 / 3) ? 'Centre' : 'Right';
+const ROW_NAMES = ['Back Wall','Back Wall','Back','Back','Back','Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid','Mid','Front','Front','Front','Front','Front','Front','Net','Net','Net','Net','Net','Net'];
+const colZone = c => c < COLS/3 ? 'Left' : c < (COLS*2/3) ? 'Centre' : 'Right';
 
 canvas.addEventListener('mousemove', e => {
-  // e.offsetX/Y automatically un-projects the 3D mouse position perfectly
+  if (isDragging) { tooltip.classList.remove('show'); return; }
   const col = Math.floor(e.offsetX / CELL);
   const row = Math.floor(e.offsetY / CELL);
-
-  if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
-    const v = heat[row][col];
-    const [R, G, B] = lerpColor(v);
-
-    ttZone.textContent     = (ROW_NAMES[Math.min(row, ROW_NAMES.length - 1)] || 'Zone') + ' · ' + colZone(col);
-    ttBar.style.width      = (v * 100) + '%';
+  if (row>=0 && row<ROWS && col>=0 && col<COLS) {
+    const v = window.heat[row][col];
+    if (v === 0) { tooltip.classList.remove('show'); return; }
+    const [R,G,B] = lerpColor(v);
+    ttZone.textContent     = (ROW_NAMES[row] || 'Zone') + ' · ' + colZone(col);
+    ttBar.style.width      = (v*100)+'%';
     ttBar.style.background = `rgb(${R},${G},${B})`;
-    ttPct.textContent      = 'Activity: ' + Math.round(v * 100) + '%';
-
+    ttPct.textContent      = 'Activity: '+Math.round(v*100)+'%';
     tooltip.classList.add('show');
-    tooltip.style.left = Math.min(e.clientX + 16, window.innerWidth - 160) + 'px';
-    tooltip.style.top  = Math.max(e.clientY - 60, 8) + 'px';
+    tooltip.style.left = Math.min(e.clientX+16, window.innerWidth-160)+'px';
+    tooltip.style.top  = Math.max(e.clientY-60, 8)+'px';
   } else {
     tooltip.classList.remove('show');
   }
 });
 canvas.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
 
-// --- INIT ---
-drawFloorAndMarkings();
-buildScene();
+// ═══════════════════════════════════════════════════════
+// 8. INIT
+// ═══════════════════════════════════════════════════════
+renderAll();
+loadAnalyzerData();
 </script>
 </body>
 </html>
