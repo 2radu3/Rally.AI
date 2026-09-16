@@ -1,5 +1,4 @@
 import cv2
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict, Counter
@@ -217,9 +216,11 @@ def export_for_web_heatmap(movement_positions, output_path='web_input.txt', cols
 # MAIN
 # ─────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('video_path', type=str)
-    parser.add_argument('session_id', type=str, nargs='?', default='latest')
+    parser = argparse.ArgumentParser(description='Padel analyser — multi-player tracker + simple shot logic')
+    parser.add_argument('video_path',     type=str)
+    parser.add_argument('--output_dir',   type=str, default='./output')
+    parser.add_argument('--heatmap_size', type=int, nargs=2, default=[50, 100])
+    parser.add_argument('--max_players',  type=int, default=4)
     args = parser.parse_args()
 
     if not os.path.exists(args.video_path):
@@ -393,24 +394,8 @@ def main():
     print("   • shots_over_time.png")
     print("   • analysis.json")
 
-   BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # Save specific heatmap and analysis for this session
-    web_path = os.path.join(BASE_DIR, 'static', 'library', f"{args.session_id}_web_input.txt")
-    json_path = os.path.join(BASE_DIR, 'static', 'library', f"{args.session_id}_analysis.json")
-
-    # This is for the 3D heatmap
-    export_for_web_heatmap(movement_positions, output_path=web_path)
-    
-    # Save detailed stats for the Library
-    with open(json_path, 'w') as f:
-        json.dump(output_data, f, indent=2)
-
-    # Also update 'latest' for the immediate view
-    latest_path = os.path.join(BASE_DIR, 'static', 'web_input.txt')
-    export_for_web_heatmap(movement_positions, output_path=latest_path)
-
-    print(f"✅ Data exported to {static_path}")
-
+    export_for_web_heatmap(movement_positions, cols=26, rows=40)
+    print("\nS-a creat fisierul cu locatii")
 
 if __name__ == "__main__":
     main()

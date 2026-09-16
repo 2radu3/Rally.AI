@@ -169,6 +169,11 @@ function toCSS([r,g,b], a=1) { return a<1 ? `rgba(${r},${g},${b},${a})` : `rgb($
 // ═══════════════════════════════════════════════════════
 // 3. DATA PROCESSING
 // ═══════════════════════════════════════════════════════
+
+// Y_OFFSET shifts all activity downward on the grid (0 = no shift, 1 = full height).
+// Increase if activity appears too high / on the net line.
+const Y_OFFSET = 0.10;
+
 function processCoordinatesToHeatmap(points) {
   const grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
 
@@ -182,7 +187,9 @@ function processCoordinatesToHeatmap(points) {
 
   points.forEach(p => {
     const col = Math.min(COLS-1, Math.floor(((p.x-minX)/rangeX)*COLS));
-    const row = Math.min(ROWS-1, Math.floor(((p.y-minY)/rangeY)*ROWS));
+    // Apply Y_OFFSET: shift row downward by a fraction of total rows
+    const rawRow = ((p.y-minY)/rangeY) + Y_OFFSET;
+    const row = Math.min(ROWS-1, Math.max(0, Math.floor(rawRow * ROWS)));
     const weight = (p.duration || 0.03) * 5.0;
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
@@ -202,7 +209,10 @@ function processCoordinatesToHeatmap(points) {
 
 async function loadAnalyzerData() {
   try {
-    const response = await fetch('web_input.txt');
+    const params = new URLSearchParams(window.location.search);
+    const dataFile = params.get('data');
+    const url = `/${dataFile}`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error("File not found");
     let text = await response.text();
     text = text.replace(/const\s+rawMatchData\s*=\s*/, '');
@@ -294,8 +304,8 @@ function renderAll() { drawFloorAndMarkings(); buildScene(); }
 //    rotZ: spin left/right
 //    scale: zoom in/out
 // ═══════════════════════════════════════════════════════
-let rotX  = 52;    // degrees — default isometric tilt
-let rotZ  = -45;   // degrees — default isometric spin
+let rotX  = 0;    // degrees — default isometric tilt
+let rotZ  = 0;   // degrees — default isometric spin
 let scale = 1.0;   // zoom multiplier
 
 let isDragging = false;

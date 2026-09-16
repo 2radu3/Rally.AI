@@ -1,144 +1,208 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import UploadArea from './UploadArea';
-import VideoPlayer from './VideoPlayer';
-import AnalysisModal from './AnalysisModal';
 import PadelHeatmap from './PadelHeatmap';
 import BorderGlow from './BorderGlow';
 
-export default function MainDashboard() {
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoUrl, setVideoUrl] = useState(null);
+export default function MainDashboard({ selectedMatch }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisPoints, setAnalysisPoints] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentMatch, setCurrentMatch] = useState(null);
+  const [history, setHistory] = useState(() => {
+    const saved = localStorage.getItem('padel_ai_history');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  // Configurație Glow pentru un look Premium
+  useEffect(() => {
+    setCurrentMatch(selectedMatch || null);
+  }, [selectedMatch]);
+
   const glowConfig = {
-    glowColor: '142 70% 50%', // Verde Padel
-    colors: ['#22c55e', '#10b981', '#059669'],
+    glowColor: '142 70% 50%',
+    colors: ['#22c55e', '#10b981'],
     borderRadius: 48,
-    backgroundColor: '#11141b',
+    backgroundColor: '#11141b'
   };
 
   const handleVideoUpload = async (file) => {
     setIsAnalyzing(true);
-    setVideoFile(file);
-    const url = URL.createObjectURL(file);
-    setVideoUrl(url);
-
-    // Simulare procesare AI
-    setTimeout(() => {
+    const formData = new FormData();
+    formData.append('video', file);
+    try {
+      const response = await fetch('http://localhost:8001/analyze', { method: 'POST', body: formData });
+      const result = await response.json();
+      if (result.status === 'ok') {
+        const newEntry = {
+          id: result.id,
+          videoName: file.name,
+          date: new Date().toLocaleDateString(),
+          stats: result.summary,
+          per_player: result.per_player,
+          heatmapFile: result.heatmapFile,
+          videoUrl: `http://localhost:8001/videos/${result.id}/${encodeURIComponent(file.name)}`
+        };
+        const newHistory = [newEntry, ...history];
+        setHistory(newHistory);
+        localStorage.setItem('padel_ai_history', JSON.stringify(newHistory));
+        setCurrentMatch(newEntry);
+      }
+    } catch (error) {
+      alert('AI Connection Failed.');
+    } finally {
       setIsAnalyzing(false);
-      setAnalysisPoints([
-        {x: 30, y: 40}, {x: 55, y: 60}, {x: 20, y: 80}, {x: 75, y: 20}
-      ]);
-    }, 2500);
+    }
   };
 
-  const handleReset = () => {
-    setVideoFile(null);
-    setVideoUrl(null);
-    setAnalysisPoints(null);
+  const stats = currentMatch?.stats;
+  const perPlayer = currentMatch?.per_player;
+
+  const formatDuration = (secs) => {
+    if (!secs) return '—';
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
   };
 
   return (
-    <div className="flex-1 bg-[#0a0c10] text-white min-h-screen flex flex-col w-full min-w-0 pb-20">
-      
-      {/* HEADER */}
-      <header className="px-12 pt-12 pb-8 flex justify-between items-end w-full shrink-0">
-        <div>
-          <h1 className="text-8xl font-black tracking-tighter italic uppercase leading-[0.8]">
-            PADEL<span className="text-green-500">AI</span>
-          </h1>
-          <p className="text-[10px] text-gray-600 font-bold tracking-[0.6em] mt-4 ml-2 uppercase">
-            Systems Core v2.2
-          </p>
-        </div>
+    <div className="flex flex-col p-12 overflow-y-auto">
+      <h1 className="text-8xl font-black italic uppercase mb-12">
+        Rally<span className="text-green-500">AI</span>
+      </h1>
 
-        <div className="flex items-center gap-6">
-          {videoFile && (
-            <button 
-              onClick={handleReset} 
-              className="px-6 py-3 border border-white/5 hover:border-red-500/50 hover:bg-red-500/5 rounded-2xl transition-all text-[10px] font-black uppercase tracking-widest"
-            >
-              Reset Video
-            </button>
+      {/* Upload / Status area */}
+      <section className="h-[50vh] mb-10">
+        <BorderGlow {...glowConfig} className="w-full h-full relative bg-black flex items-center justify-center">
+          {!currentMatch && !isAnalyzing && (
+            <UploadArea onFileSelect={handleVideoUpload} />
           )}
-          <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-[0.2em] italic">
-            ● System Active
-          </div>
-        </div>
-      </header>
-
-      {/* ZONA VIDEO - REPARATĂ PENTRU COLȚURI */}
-      <section className="w-full px-12 pb-12 h-[80vh] shrink-0">
-        <BorderGlow {...glowConfig} className="w-full h-full overflow-hidden">
-          {/* Containerul rounded-[inherit] cu overflow-hidden taie colțurile video-ului */}
-          <div className="w-full h-full relative bg-black rounded-[inherit] overflow-hidden flex items-center justify-center">
-            
-            {!videoFile && !isAnalyzing && (
-              <UploadArea onFileSelect={handleVideoUpload} />
-            )}
-            
-            {isAnalyzing && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0a0c10]/95 z-50 rounded-[inherit]">
-                 <div className="w-20 h-20 border-8 border-green-500 border-t-transparent rounded-full animate-spin shadow-[0_0_30px_rgba(34,197,94,0.2)]"></div>
-                 <h2 className="text-3xl font-black mt-10 text-green-500 italic uppercase tracking-tighter">Analyzing Match Data...</h2>
-              </div>
-            )}
-
-            {!isAnalyzing && videoFile && videoUrl && (
-              <VideoPlayer 
-                videoUrl={videoUrl} 
-                fileName={videoFile.name} 
-                onOpenDetails={() => setIsModalOpen(true)} 
-              />
-            )}
-          </div>
+          {isAnalyzing && (
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              <p className="mt-4 text-green-500 font-black italic uppercase tracking-widest">Processing AI...</p>
+            </div>
+          )}
+          {currentMatch && !isAnalyzing && (
+            <div className="text-center">
+              <p className="text-green-500 font-black mb-1 uppercase tracking-tighter text-xs">Analysis Complete</p>
+              <h2 className="text-3xl font-black italic mb-3">{currentMatch.videoName}</h2>
+              {currentMatch.videoUrl && (
+                <video src={currentMatch.videoUrl} controls className="mt-2 max-h-40 rounded-xl mx-auto" />
+              )}
+              <button onClick={() => setCurrentMatch(null)} className="mt-4 text-[10px] text-gray-500 underline block mx-auto">
+                Upload another
+              </button>
+            </div>
+          )}
         </BorderGlow>
       </section>
 
-      {/* STATISTICI & HEATMAP (Apar doar după upload) */}
-      {videoFile && !isAnalyzing && (
-        <div className="space-y-32 animate-in fade-in slide-in-from-bottom-10 duration-1000">
-          
-          {/* GRID STATS */}
-          <section className="px-12 flex gap-10 max-w-7xl mx-auto w-full">
-            <BorderGlow {...glowConfig} className="flex-1">
-              <div className="p-12 text-center">
-                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-4">Total Smashes</p>
-                <p className="text-8xl font-black text-green-400 italic tracking-tighter">12</p>
-              </div>
-            </BorderGlow>
+      {/* Stats Grid */}
+      {stats && (
+        <div className="mb-10 grid grid-cols-2 gap-6">
 
-            <BorderGlow {...glowConfig} className="flex-1">
-              <div className="p-12 text-center">
-                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-4">Error Rate</p>
-                <p className="text-8xl font-black text-red-500 italic tracking-tighter">8%</p>
-              </div>
-            </BorderGlow>
-          </section>
+          {/* Match overview */}
+          <div className="bg-[#11141b] border border-white/5 rounded-3xl p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Match Overview</p>
+            <div className="grid grid-cols-2 gap-4">
+              <StatBox label="Total Shots" value={stats.total_shots} />
+              <StatBox label="Shots / Min" value={stats.shots_per_minute} />
+              <StatBox label="Duration" value={formatDuration(stats.duration)} />
+              <StatBox label="Players" value={stats.total_players} />
+            </div>
+          </div>
 
-          {/* HEATMAP SECTION (Fără Impact Radar în meniu, dar vizibil aici) */}
-          <section className="px-12 flex flex-col items-center gap-12">
-            <h2 className="text-6xl font-black italic uppercase tracking-tighter">
-              Positioning <span className="text-green-500">Analysis</span>
-            </h2>
-            <BorderGlow {...glowConfig} borderRadius={64} className="w-full max-w-7xl h-[700px]">
-              <div className="w-full h-full p-12">
-                <PadelHeatmap points={analysisPoints} />
-              </div>
-            </BorderGlow>
-          </section>
+          {/* Shot breakdown */}
+          <div className="bg-[#11141b] border border-white/5 rounded-3xl p-8">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Shot Breakdown</p>
+            <div className="grid grid-cols-3 gap-4">
+              <StatBox label="Forehand" value={stats.forehand_count} color="text-green-400" />
+              <StatBox label="Backhand" value={stats.backhand_count} color="text-blue-400" />
+              <StatBox label="Smash" value={stats.smash_count} color="text-red-400" />
+            </div>
 
+            {/* Shot type bar */}
+            {stats.total_shots > 0 && (
+              <div className="mt-6">
+                <div className="flex rounded-full overflow-hidden h-2">
+                  <div
+                    className="bg-green-500 transition-all"
+                    style={{ width: `${(stats.forehand_count / stats.total_shots) * 100}%` }}
+                  />
+                  <div
+                    className="bg-blue-500 transition-all"
+                    style={{ width: `${(stats.backhand_count / stats.total_shots) * 100}%` }}
+                  />
+                  <div
+                    className="bg-red-500 transition-all"
+                    style={{ width: `${(stats.smash_count / stats.total_shots) * 100}%` }}
+                  />
+                </div>
+                <div className="flex gap-4 mt-2">
+                  <Legend color="bg-green-500" label="Forehand" />
+                  <Legend color="bg-blue-500" label="Backhand" />
+                  <Legend color="bg-red-500" label="Smash" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Per player breakdown */}
+          {perPlayer && Object.keys(perPlayer).length > 0 && (
+            <div className="col-span-2 bg-[#11141b] border border-white/5 rounded-3xl p-8">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 mb-6">Per Player</p>
+              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${Object.keys(perPlayer).length}, 1fr)` }}>
+                {Object.entries(perPlayer).map(([pid, data]) => (
+                  <div key={pid} className="bg-black/30 rounded-2xl p-5 border border-white/5">
+                    <p className="text-xs font-black uppercase text-green-500 mb-3">{pid}</p>
+                    <p className="text-3xl font-black italic mb-3">{data.total} <span className="text-xs text-gray-500">shots</span></p>
+                    <div className="flex flex-col gap-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Forehand</span>
+                        <span className="font-bold text-green-400">{data.forehand}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Backhand</span>
+                        <span className="font-bold text-blue-400">{data.backhand}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Smash</span>
+                        <span className="font-bold text-red-400">{data.smash}</span>
+                      </div>
+                    </div>
+                    {/* Mini bar for this player */}
+                    {data.total > 0 && (
+                      <div className="flex rounded-full overflow-hidden h-1 mt-3">
+                        <div className="bg-green-500" style={{ width: `${(data.forehand / data.total) * 100}%` }} />
+                        <div className="bg-blue-500" style={{ width: `${(data.backhand / data.total) * 100}%` }} />
+                        <div className="bg-red-500" style={{ width: `${(data.smash / data.total) * 100}%` }} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <AnalysisModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        points={analysisPoints} 
-      />
+      {/* Heatmap */}
+      {currentMatch && <PadelHeatmap heatmapFile={currentMatch.heatmapFile} />}
+    </div>
+  );
+}
+
+function StatBox({ label, value, color = 'text-white' }) {
+  return (
+    <div>
+      <p className={`text-3xl font-black italic ${color}`}>{value ?? '—'}</p>
+      <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">{label}</p>
+    </div>
+  );
+}
+
+function Legend({ color, label }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={`w-2 h-2 rounded-full ${color}`} />
+      <span className="text-[10px] text-gray-500">{label}</span>
     </div>
   );
 }
