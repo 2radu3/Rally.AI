@@ -209,7 +209,10 @@ function processCoordinatesToHeatmap(points) {
 
 async function loadAnalyzerData() {
   try {
-    const response = await fetch('../web_input.txt');
+    const params = new URLSearchParams(window.location.search);
+    const dataFile = params.get('data');
+    const url = `/${dataFile}`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error("File not found");
     let text = await response.text();
     text = text.replace(/const\s+rawMatchData\s*=\s*/, '');
