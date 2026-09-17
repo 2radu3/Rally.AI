@@ -4,6 +4,11 @@ Most padel players hit a ceiling because they can't see what they're doing wrong
 
 Upload a video of a match, and RallyAI automatically detects players, classifies their shots, and generates an interactive 3D intensity heatmap of court coverage.
 
+
+
+https://github.com/user-attachments/assets/34aaffc4-e4da-4d8c-b717-7f55a8d4ac91
+
+
 ![3dview](s1.png)
 ![3dview](s2.png)
 
