@@ -211,10 +211,23 @@ async function loadAnalyzerData() {
   try {
     const params = new URLSearchParams(window.location.search);
     const dataFile = params.get('data');
-    const url = `/${dataFile}`;
+    if (!dataFile) throw new Error("No ?data= parameter given");
+    // Always resolve to an absolute URL so the iframe never treats a path
+    // segment as a hostname.
+    let url;
+    if (/^https?:\/\//.test(dataFile)) {
+      url = dataFile;
+    } else {
+      const path = '/' + dataFile.replace(/^\/+/, '');
+      url = new URL(path, window.location.origin).href;
+    }
     const response = await fetch(url);
-    if (!response.ok) throw new Error("File not found");
+    if (!response.ok) throw new Error(`HTTP ${response.status} fetching ${url}`);
     let text = await response.text();
+    if (text.trimStart().startsWith('<')) {
+      // Got the SPA index.html back instead of the data file.
+      throw new Error(`Got HTML, not heatmap data, from ${url}`);
+    }
     text = text.replace(/const\s+rawMatchData\s*=\s*/, '');
     text = text.replace(/;\s*$/, '');
     text = text.replace(/np\.float32\((.*?)\)/g, '$1');
@@ -224,7 +237,13 @@ async function loadAnalyzerData() {
     window.heat = processCoordinatesToHeatmap(rawMatchData);
     renderAll();
   } catch (e) {
-    console.error("❌ Failed to load web_input.txt:", e);
+    console.error("❌ Failed to load heatmap data:", e);
+    const banner = document.createElement('div');
+    banner.style.cssText =
+      'position:fixed;top:0;left:0;right:0;z-index:9999;padding:10px 14px;' +
+      'background:#7f1d1d;color:#fecaca;font:600 12px/1.4 system-ui,sans-serif;';
+    banner.textContent = `Heatmap data failed to load — ${e.message}`;
+    document.body.appendChild(banner);
   }
 }
 
@@ -429,3 +448,4 @@ loadAnalyzerData();
 </script>
 </body>
 </html>
+

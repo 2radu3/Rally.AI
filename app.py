@@ -5,11 +5,20 @@ import subprocess, os, shutil, uuid, json, sys
 app = Flask(__name__)
 CORS(app)
 
-UPLOAD_FOLDER = "uploads"
-PUBLIC_FOLDER = os.path.join("frontend", "public")
+# Anchor every path to this file's location, not the shell's cwd.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+UPLOAD_FOLDER  = os.path.join(BASE_DIR, "uploads")
+OUTPUT_FOLDER  = os.path.join(BASE_DIR, "output")
+# Heatmap data is generated at runtime, so Flask serves it -- NOT frontend/public,
+# which Vite indexes once at startup and will not re-scan.
+HEATMAP_FOLDER = os.path.join(BASE_DIR, "heatmaps")
+
+BACKEND_ORIGIN = os.environ.get("BACKEND_ORIGIN", "http://localhost:8001")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(PUBLIC_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+os.makedirs(HEATMAP_FOLDER, exist_ok=True)
 
 
 @app.route("/analyze", methods=["POST"])
@@ -26,24 +35,41 @@ def analyze():
     file.save(video_path)
 
     result = subprocess.run(
-        [sys.executable, "analyzer.py", video_path, "--output_dir", "./output"],
-        capture_output=True, text=True
+        [sys.executable, os.path.join(BASE_DIR, "analyzer.py"),
+         video_path, "--output_dir", OUTPUT_FOLDER],
+        capture_output=True, text=True,
+        cwd=BASE_DIR,          # analyzer.py writes web_input.txt relative to cwd
     )
 
     if result.returncode != 0:
         return jsonify({"error": result.stderr}), 500
 
-    src_txt = "web_input.txt"
+    # analyzer.py writes web_input.txt with a bare relative path, so check both
+    # the cwd we forced and the output dir.
     heatmap_filename = f"heatmap_{unique_id}.txt"
-    dst_txt = os.path.join(PUBLIC_FOLDER, heatmap_filename)
-    if os.path.exists(src_txt):
-        shutil.copy(src_txt, dst_txt)
+    dst_txt = os.path.join(HEATMAP_FOLDER, heatmap_filename)
+
+    src_txt = next(
+        (p for p in (os.path.join(BASE_DIR, "web_input.txt"),
+                     os.path.join(OUTPUT_FOLDER, "web_input.txt"))
+         if os.path.exists(p)),
+        None,
+    )
+    if src_txt is None:
+        # Fail loudly. Silently skipping this is what produced a blank heatmap.
+        return jsonify({
+            "error": "analyzer did not produce web_input.txt",
+            "stdout": result.stdout[-2000:],
+            "stderr": result.stderr[-2000:],
+        }), 500
+
+    shutil.copy(src_txt, dst_txt)
 
     summary = {}
     per_player = {}
     video_info = {}
 
-    analysis_json_path = os.path.join("output", "analysis.json")
+    analysis_json_path = os.path.join(OUTPUT_FOLDER, "analysis.json")
     if os.path.exists(analysis_json_path):
         with open(analysis_json_path) as f:
             analysis = json.load(f)
@@ -90,8 +116,17 @@ def analyze():
         "summary": summary,
         "per_player": per_player,
         "heatmapFile": heatmap_filename,
+        "heatmapUrl": f"{BACKEND_ORIGIN}/heatmaps/{heatmap_filename}",
         "id": unique_id
     })
+
+
+@app.route("/heatmaps/<path:filename>", methods=["GET"])
+def serve_heatmap(filename):
+    if not os.path.exists(os.path.join(HEATMAP_FOLDER, filename)):
+        return jsonify({"error": "heatmap not found"}), 404
+    # text/plain so the browser doesn't try to sniff it as HTML
+    return send_from_directory(HEATMAP_FOLDER, filename, mimetype="text/plain")
 
 
 @app.route("/videos/<match_id>/<filename>", methods=["GET"])
@@ -124,8 +159,9 @@ def list_matches():
         matches.append({
             "id": match_id,
             "videoName": video_name,
-            "videoUrl": f"/videos/{match_id}/{video_name}",
+            "videoUrl": f"{BACKEND_ORIGIN}/videos/{match_id}/{video_name}",
             "heatmapFile": f"heatmap_{match_id}.txt",
+            "heatmapUrl": f"{BACKEND_ORIGIN}/heatmaps/heatmap_{match_id}.txt",
             "summary": stats.get("summary", {}),
             "per_player": stats.get("per_player", {}),
         })
@@ -134,4 +170,4 @@ def list_matches():
 
 if __name__ == "__main__":
     app.run(debug=True, port=8001)
-    
+

@@ -1,8 +1,13 @@
-import cv2
 import os
+import sys
+import uuid
 import shutil
+import subprocess
+import json
+
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 
 app = FastAPI()
 
@@ -13,56 +18,111 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Paths (all relative to the project root, one level up from backend/) ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+OUTPUT_FOLDER = os.path.join(BASE_DIR, "output")
+PUBLIC_FOLDER = os.path.join(BASE_DIR, "frontend", "public")
+ANALYZER_SCRIPT = os.path.join(BASE_DIR, "analyzer.py")
+WEB_INPUT_FILE = os.path.join(BASE_DIR, "web_input.txt")
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+os.makedirs(PUBLIC_FOLDER, exist_ok=True)
+
+
 @app.post("/analyze")
-async def analyze_video(file: UploadFile = File(...)):
-    temp_path = f"temp_{file.filename}"
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+async def analyze_video(video: UploadFile = File(...)):
+    unique_id = str(uuid.uuid4())
+    match_folder = os.path.join(UPLOAD_FOLDER, unique_id)
+    os.makedirs(match_folder, exist_ok=True)
 
-    cap = cv2.VideoCapture(temp_path)
-    # Algoritm de detectare a mișcării
-    fgbg = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=50, detectShadows=True)
-    
-    heatmap_data = []
-    frame_idx = 0
+    video_path = os.path.join(match_folder, video.filename)
+    with open(video_path, "wb") as buffer:
+        shutil.copyfileobj(video.file, buffer)
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret or frame_idx > 500: break
-        
-        # Procesăm 1 din 5 cadre
-        if frame_idx % 5 == 0:
-            # 1. Aplicăm masca de mișcare
-            fgmask = fgbg.apply(frame)
-            
-            # 2. Curățăm imaginea (eliminăm zgomotul mic)
-            _, fgmask = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY)
-            contours, _ = cv2.findContours(fgmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Run the real YOLO pose analysis pipeline
+    result = subprocess.run(
+        [sys.executable, ANALYZER_SCRIPT, video_path, "--output_dir", OUTPUT_FOLDER],
+        capture_output=True,
+        text=True,
+        cwd=BASE_DIR,
+    )
 
-            if contours:
-                # Luăm cel mai mare obiect care se mișcă (presupunem că e jucătorul)
-                largest_contour = max(contours, key=cv2.contourArea)
-                if cv2.contourArea(largest_contour) > 500: # Filtru de mărime
-                    (x, y, w, h) = cv2.boundingRect(largest_contour)
-                    
-                    # Coordonatele centrului obiectului (normalizate 0-1)
-                    center_x = (x + w // 2) / frame.shape[1]
-                    center_y = (y + h // 2) / frame.shape[0]
-                    
-                    heatmap_data.append({"x": round(center_x, 3), "y": round(center_y, 3)})
+    if result.returncode != 0:
+        print("=== analyzer.py FAILED ===")
+        print(result.stderr)
+        print("==========================")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "error": result.stderr[-4000:]},
+        )
 
-        frame_idx += 1
+    analysis_path = os.path.join(OUTPUT_FOLDER, "analysis.json")
+    try:
+        with open(analysis_path) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "error": "analyzer.py did not produce analysis.json"},
+        )
 
-    cap.release()
-    if os.path.exists(temp_path): os.remove(temp_path)
+    players = data.get("players", {})
+    summary_raw = data.get("summary", {})
+    video_info = data.get("video_info", {})
 
-    return {
-        "status": "success",
-        "points": heatmap_data,
-        "count": len(heatmap_data),
-        "method": "OpenCV Motion Tracking"
+    forehand_count = backhand_count = smash_count = 0
+    per_player = {}
+
+    for pid, pdata in players.items():
+        shots = pdata.get("shot_detections", [])
+        counts = {"forehand": 0, "backhand": 0, "smash": 0}
+        for s in shots:
+            shot_type = s.get("type")
+            if shot_type in counts:
+                counts[shot_type] += 1
+
+        forehand_count += counts["forehand"]
+        backhand_count += counts["backhand"]
+        smash_count += counts["smash"]
+
+        per_player[f"Player {pid}"] = {
+            "total": len(shots),
+            "forehand": counts["forehand"],
+            "backhand": counts["backhand"],
+            "smash": counts["smash"],
+        }
+
+    summary = {
+        "total_shots": summary_raw.get("total_shots", 0),
+        "shots_per_minute": summary_raw.get("shots_per_minute", 0),
+        "duration": round(video_info.get("duration", 0)),
+        "total_players": summary_raw.get("total_players", 0),
+        "forehand_count": forehand_count,
+        "backhand_count": backhand_count,
+        "smash_count": smash_count,
     }
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Copy the per-match web heatmap data into frontend/public so heatmap.html
+    # (served by Vite at the root) can fetch it by filename.
+    heatmap_filename = f"heatmap_{unique_id}.txt"
+    if os.path.exists(WEB_INPUT_FILE):
+        shutil.copy(WEB_INPUT_FILE, os.path.join(PUBLIC_FOLDER, heatmap_filename))
+
+    return {
+        "status": "ok",
+        "id": unique_id,
+        "summary": summary,
+        "per_player": per_player,
+        "heatmapFile": heatmap_filename,
+    }
+
+
+@app.get("/videos/{match_id}/{filename}")
+async def get_video(match_id: str, filename: str):
+    path = os.path.join(UPLOAD_FOLDER, match_id, filename)
+    if not os.path.exists(path):
+        return JSONResponse(status_code=404, content={"error": "Video not found"})
+    return FileResponse(path)
+

@@ -29,7 +29,10 @@ export default function MainDashboard({ selectedMatch }) {
     try {
       const response = await fetch('http://localhost:8001/analyze', { method: 'POST', body: formData });
       const result = await response.json();
-      if (result.status === 'ok') {
+      if (!response.ok || result.status !== 'ok') {
+        console.error('Analyze failed:', result);
+        alert(`Analysis failed: ${result.error || response.statusText}`);
+      } else {
         const newEntry = {
           id: result.id,
           videoName: file.name,
@@ -37,6 +40,7 @@ export default function MainDashboard({ selectedMatch }) {
           stats: result.summary,
           per_player: result.per_player,
           heatmapFile: result.heatmapFile,
+          heatmapUrl: result.heatmapUrl,
           videoUrl: `http://localhost:8001/videos/${result.id}/${encodeURIComponent(file.name)}`
         };
         const newHistory = [newEntry, ...history];
@@ -184,7 +188,12 @@ export default function MainDashboard({ selectedMatch }) {
       )}
 
       {/* Heatmap */}
-      {currentMatch && <PadelHeatmap heatmapFile={currentMatch.heatmapFile} />}
+      {currentMatch && (
+        <PadelHeatmap
+          heatmapUrl={currentMatch.heatmapUrl}
+          heatmapFile={currentMatch.heatmapFile}
+        />
+      )}
     </div>
   );
 }
@@ -206,3 +215,4 @@ function Legend({ color, label }) {
     </div>
   );
 }
+

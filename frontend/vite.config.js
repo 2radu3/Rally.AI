@@ -1,7 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/heatmaps': 'http://localhost:8001',
+      '/analyze':  'http://localhost:8001',
+      '/videos':   'http://localhost:8001',
+      '/matches':  'http://localhost:8001',
+    }
+  }
 })
+

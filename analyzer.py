@@ -23,14 +23,10 @@ except Exception as e:
     exit(1)
 
 
-# ─────────────────────────────────────────────
-# PLAYER TRACKER  (from file 1)
-# ─────────────────────────────────────────────
+# ────────────────
+# PLAYER TRACKER 
+# ────────────────
 class PlayerTracker:
-    """
-    Fixed ID pool [0..max_players-1]. Centroid-distance matching.
-    IDs never exceed max_players regardless of occlusions.
-    """
     def __init__(self, max_players=4, max_lost=MAX_LOST_FRAMES, max_dist=200):
         self.max_players = max_players
         self.max_lost    = max_lost
@@ -111,15 +107,12 @@ def get_player_position(kp, cf, frame_w, frame_h):
     }
 
 
-# ─────────────────────────────────────────────
-# SHOT CLASSIFIER  (exact logic from file 2)
-# ─────────────────────────────────────────────
+# ─────────────────
+# SHOT CLASSIFIER
+# ─────────────────
 def classify_shot(kp, cf, prev_kp, frame_w, frame_h):
-    """
-    Identical to file 2's classify_shot.
-    Only change: divides by frame_w instead of hardcoded 1920.
-    """
     if prev_kp is None: return None, 0.0
+    if len(kp) < 13 or len(prev_kp) < 13: return None, 0.0
 
     lw,  rw  = kp[9],  kp[10]
     plw, prw = prev_kp[9], prev_kp[10]
@@ -142,14 +135,14 @@ def classify_shot(kp, cf, prev_kp, frame_w, frame_h):
 
 
 # ─────────────────────────────────────────────
-# HEATMAP  (from file 1, all players combined)
+# HEATMAP
 # ─────────────────────────────────────────────
 def generate_heatmap(movement_positions, shot_detections, output_path, heatmap_size=(50, 100)):
     all_positions = [p for positions in movement_positions.values() for p in positions]
     all_shots     = [s for shots in shot_detections.values() for s in shots]
 
     if not all_positions:
-        print("⚠️  No positions to plot.")
+        print("No positions to plot.")
         return
 
     x = [p['x'] for p in all_positions]
@@ -158,7 +151,7 @@ def generate_heatmap(movement_positions, shot_detections, output_path, heatmap_s
     plt.style.use('dark_background')
     plt.figure(figsize=(8, 10))
 
-    # Hexbin heatmap — exact style from file 2
+    # Hexbin heatmap
     plt.hexbin(x, y, gridsize=25, cmap='YlOrRd', mincnt=1, edgecolors='none', alpha=0.8)
 
     # Court markings
@@ -209,7 +202,7 @@ def export_for_web_heatmap(movement_positions, output_path='web_input.txt', cols
     with open(output_path, 'w') as f:
         f.write("const rawMatchData = " + json.dumps(combined_data) + ";")
     
-    print(f"✅ Web heatmap data exported: {output_path} ({len(combined_data)} points)")
+    print(f"Web heatmap data exported: {output_path} ({len(combined_data)} points)")
 
 
 # ─────────────────────────────────────────────
@@ -224,14 +217,14 @@ def main():
     args = parser.parse_args()
 
     if not os.path.exists(args.video_path):
-        print(f"❌ Video not found: {args.video_path}")
+        print(f"Video not found: {args.video_path}")
         return
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     cap = cv2.VideoCapture(args.video_path)
     if not cap.isOpened():
-        print(f"❌ Cannot open video: {args.video_path}")
+        print(f"Cannot open video: {args.video_path}")
         return
 
     frame_w, frame_h = get_frame_dims(cap)
@@ -264,7 +257,7 @@ def main():
         try:
             results = model(frame, verbose=False, imgsz=640)
         except Exception as e:
-            print(f"⚠️  Inference error frame {frame_count}: {e}")
+            print(f"Inference error frame {frame_count}: {e}")
             frame_count += 1
             continue
 
@@ -277,7 +270,10 @@ def main():
         boxes = r.boxes.xyxy.cpu().numpy() if r.boxes is not None else []
         for i in range(len(r.keypoints.xy)):
             kp_xy = r.keypoints.xy[i].cpu().numpy()
-            cf    = r.keypoints.conf[i].cpu().numpy()
+            if r.keypoints.conf is not None:
+                cf = r.keypoints.conf[i].cpu().numpy()
+            else:
+                cf = np.ones(kp_xy.shape[0])
             bbox  = boxes[i].tolist() if i < len(boxes) else [0, 0, frame_w, frame_h]
             detections.append({'bbox': bbox, 'keypoints_xy': kp_xy, 'confidences': cf})
 
@@ -291,7 +287,7 @@ def main():
             if pos:
                 movement_positions[pid].append(pos)
 
-            # Shot classification — single global cooldown (matches file 2 behaviour)
+            # Shot classification, single global cooldown
             if pid in prev_kp and (frame_time - last_shot_time) > SHOT_COOLDOWN:
                 shot_type, conf = classify_shot(kp, cf, prev_kp[pid], frame_w, frame_h)
                 if shot_type:
@@ -308,7 +304,7 @@ def main():
         frame_count += 1
         if frame_count % max(1, total_frames // 10) == 0:
             total_hits = sum(len(v) for v in shot_detections.values())
-            print(f"   ⏳ {frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%) | Shots: {total_hits}")
+            print(f"{frame_count}/{total_frames} ({frame_count/total_frames*100:.1f}%) | Shots: {total_hits}")
 
     cap.release()
 
@@ -356,9 +352,9 @@ def main():
             timeline_path = os.path.join(args.output_dir, 'shots_over_time.png')
             plt.savefig(timeline_path, dpi=100)
             plt.close()
-            print(f"✅ Shot timeline saved: {timeline_path}")
+            print(f"Shot timeline saved: {timeline_path}")
         except Exception as e:
-            print(f"⚠️  Timeline error: {e}")
+            print(f"Timeline error: {e}")
 
     # ── JSON ──────────────────────────────────────────────────────────────
     output_data = {
@@ -385,11 +381,11 @@ def main():
         json_path = os.path.join(args.output_dir, 'analysis.json')
         with open(json_path, 'w') as f:
             json.dump(output_data, f, indent=2)
-        print(f"✅ JSON saved: {json_path}")
+        print(f"JSON saved: {json_path}")
     except Exception as e:
-        print(f"⚠️  JSON error: {e}")
+        print(f"JSON error: {e}")
 
-    print(f"\n📁 Outputs in: {args.output_dir}")
+    print(f"\nOutputs in: {args.output_dir}")
     print("   • match_heatmap.png")
     print("   • shots_over_time.png")
     print("   • analysis.json")
@@ -399,3 +395,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

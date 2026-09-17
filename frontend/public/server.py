@@ -178,3 +178,4 @@ async def analyze(video: UploadFile = File(...)):
         "summary":      summary,
         "total_points": len(points),
     })
+
