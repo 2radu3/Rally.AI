@@ -1,7 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// GitHub Pages serves the site from /Rally.AI/ (the repo name).
 export default defineConfig({
+  base: process.env.VITE_BASE || '/',
   plugins: [react()],
   server: {
     proxy: {
@@ -12,4 +14,3 @@ export default defineConfig({
     }
   }
 })
-
