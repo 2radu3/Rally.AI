@@ -14,7 +14,7 @@ export default function PadelHeatmap({ heatmapUrl, heatmapFile }) {
   return (
     <div className="w-full h-[600px] rounded-[3rem] overflow-hidden border border-white/10 relative">
       <iframe
-        src={`/heatmap.html?data=${encodeURIComponent(source)}`}
+        src={`${import.meta.env.BASE_URL}heatmap.html?data=${encodeURIComponent(source)}`}
         className="w-full h-full border-none"
         title="AI Heatmap"
       />

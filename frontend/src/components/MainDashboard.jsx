@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import UploadArea from './UploadArea';
 import PadelHeatmap from './PadelHeatmap';
 import BorderGlow from './BorderGlow';
+import { DEMO, demoStats, demoPerPlayer } from '../demo';
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 export default function MainDashboard({ selectedMatch }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -24,10 +27,32 @@ export default function MainDashboard({ selectedMatch }) {
 
   const handleVideoUpload = async (file) => {
     setIsAnalyzing(true);
+
+    if (DEMO) {
+      // Static demo: no backend, show pre-computed sample results.
+      await new Promise((r) => setTimeout(r, 2500));
+      const entry = {
+        id: `demo-${Date.now()}`,
+        videoName: file.name,
+        date: new Date().toLocaleDateString(),
+        stats: demoStats,
+        per_player: demoPerPlayer,
+        heatmapFile: 'web_input.txt',
+        heatmapUrl: `${import.meta.env.BASE_URL}web_input.txt`,
+      };
+      const newHistory = [entry, ...history];
+      setHistory(newHistory);
+      localStorage.setItem('padel_ai_history', JSON.stringify(newHistory));
+      // The blob URL only works in this session, so keep it out of history.
+      setCurrentMatch({ ...entry, videoUrl: URL.createObjectURL(file) });
+      setIsAnalyzing(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('video', file);
     try {
-      const response = await fetch('http://localhost:8001/analyze', { method: 'POST', body: formData });
+      const response = await fetch(`${API}/analyze`, { method: 'POST', body: formData });
       const result = await response.json();
       if (!response.ok || result.status !== 'ok') {
         console.error('Analyze failed:', result);
@@ -41,7 +66,7 @@ export default function MainDashboard({ selectedMatch }) {
           per_player: result.per_player,
           heatmapFile: result.heatmapFile,
           heatmapUrl: result.heatmapUrl,
-          videoUrl: `http://localhost:8001/videos/${result.id}/${encodeURIComponent(file.name)}`
+          videoUrl: `${API}/videos/${result.id}/${encodeURIComponent(file.name)}`
         };
         const newHistory = [newEntry, ...history];
         setHistory(newHistory);
@@ -70,6 +95,14 @@ export default function MainDashboard({ selectedMatch }) {
       <h1 className="text-8xl font-black italic uppercase mb-12">
         Rally<span className="text-green-500">AI</span>
       </h1>
+
+      {DEMO && (
+        <div className="mb-8 rounded-2xl border border-green-500/30 bg-green-500/10 px-6 py-4 text-sm text-green-300">
+          <b>Demo mode.</b> This hosted version has no AI backend. Pick any video and
+          you will see sample results. The full pipeline (YOLOv8-Pose) runs locally;
+          see the README.
+        </div>
+      )}
 
       {/* Upload / Status area */}
       <section className="h-[50vh] mb-10">
